@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Kratos Agentic Analyzer</title>
+  <link rel="stylesheet" href="/static/styles.css"/>
+</head>
+<body>
+
+<nav id="sidebar">
+  <div class="sidebar-brand">
+    <span class="brand-icon">&#9889;</span>
+    <div>
+      <div class="brand-title">Kratos</div>
+      <div class="brand-sub">Agentic Code Analyzer</div>
+    </div>
+  </div>
+  <ul class="nav-links">
+    <li><a href="#" class="nav-item active" data-section="upload">&#128228; Analyze</a></li>
+    <li><a href="#" class="nav-item" data-section="summary">&#128203; Summary</a></li>
+    <li><a href="#" class="nav-item" data-section="controls">&#9989; Inline Controls</a></li>
+    <li><a href="#" class="nav-item" data-section="reasoning">&#128220; Reasoning Trace</a></li>
+  </ul>
+  <div class="sidebar-footer">
+    <div id="analysis-meta" style="display:none">
+      <div class="meta-item" id="meta-file">--</div>
+      <div class="meta-item" id="meta-lang">--</div>
+      <div class="meta-item" id="meta-loc">--</div>
+      <div class="meta-item" id="meta-risk">--</div>
+    </div>
+  </div>
+</nav>
+
+<main id="main">
+  <section id="section-upload" class="page-section active">
+    <div class="page-header">
+      <h1>Kratos Agentic Analyzer</h1>
+      <p class="page-sub">RAG + LangGraph code intelligence for FDIC 370, OWASP, NIST, PCI-DSS, GLBA.</p>
+    </div>
+    <div class="unified-area">
+      <div class="upload-area" id="drop-zone">
+        <div class="upload-icon">&#128194;</div>
+        <p>Drag &amp; drop a file or <span class="upload-link" id="browse-link">browse</span></p>
+        <p class="upload-hint">Supports: .py .js .ts .java .sql .yaml .txt</p>
+        <input type="file" id="file-input" hidden/>
+      </div>
+      <div class="or-divider"><span>or paste your code</span></div>
+      <textarea id="paste-code" rows="14" placeholder="Paste your source code here..."></textarea>
+      <button type="button" id="analyze-btn" class="btn btn-primary btn-lg btn-full">
+        &#9889; Analyze Code
+      </button>
+      <div class="or-divider"><span>or scan from GitHub</span></div>
+      <div class="github-input-area">
+        <div class="github-input-row">
+          <span class="gh-icon">&#128279;</span>
+          <input type="text" id="github-url"
+                 placeholder="https://github.com/owner/repo  or  .../blob/main/file.py"/>
+        </div>
+        <div class="github-type-row">
+          <label class="radio-label">
+            <input type="radio" name="gh-type" value="file" checked/> Single File
+          </label>
+          <label class="radio-label">
+            <input type="radio" name="gh-type" value="repo"/> Full Repo Scan
+          </label>
+        </div>
+        <button type="button" id="analyze-github-btn" class="btn btn-secondary btn-lg btn-full">
+          &#128279; Fetch &amp; Analyze from GitHub
+        </button>
+      </div>
+    </div>
+  </section>
+
+  <section id="section-summary" class="page-section">
+    <div class="page-header">
+      <h2>Analysis Summary</h2>
+      <p class="page-sub" id="summary-sub">Run an analysis to see results.</p>
+    </div>
+    <div id="summary-content"></div>
+    <div id="narrative-sections"></div>
+  </section>
+
+  <section id="section-controls" class="page-section">
+    <div class="page-header">
+      <h2>Inline Controls</h2>
+      <p class="page-sub">Controls detected in code, mapped to FDIC 370 / OWASP / NIST / PCI-DSS / GLBA.</p>
+    </div>
+    <div id="controls-list"><p class="placeholder">No analysis yet.</p></div>
+  </section>
+
+  <section id="section-reasoning" class="page-section">
+    <div class="page-header">
+      <h2>Reasoning Trace</h2>
+      <p class="page-sub">Step-by-step explanation from the agent.</p>
+    </div>
+    <ol id="reasoning-list"></ol>
+  </section>
+</main>
+
+<div id="loading-overlay" style="display:none">
+  <div class="spinner-wrap">
+    <div class="spinner"></div>
+    <div class="loading-stages">
+      <div class="stage active">&#128269; Retrieving regulations...</div>
+      <div class="stage">&#128187; Analyzing code structure...</div>
+      <div class="stage">&#129302; Agent reasoning...</div>
+    </div>
+  </div>
+</div>
+
+<script src="/static/app.js"></script>
+</body>
+</html>

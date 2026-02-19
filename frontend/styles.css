@@ -1,0 +1,300 @@
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  background: #0f172a;
+  color: #e5e7eb;
+  display: flex;
+  height: 100vh;
+}
+
+#sidebar {
+  width: 260px;
+  background: #020617;
+  color: #e5e7eb;
+  display: flex;
+  flex-direction: column;
+  padding: 16px;
+}
+
+.sidebar-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+.brand-icon {
+  font-size: 28px;
+}
+
+.brand-title {
+  font-weight: 700;
+}
+
+.brand-sub {
+  font-size: 12px;
+  color: #9ca3af;
+}
+
+.nav-links {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 20px 0;
+}
+
+.nav-item {
+  display: block;
+  padding: 8px 10px;
+  border-radius: 6px;
+  color: #e5e7eb;
+  text-decoration: none;
+  margin-bottom: 4px;
+  font-size: 14px;
+}
+
+.nav-item.active,
+.nav-item:hover {
+  background: #1f2937;
+}
+
+.sidebar-footer {
+  margin-top: auto;
+  font-size: 12px;
+  color: #9ca3af;
+}
+
+.meta-item {
+  margin-bottom: 2px;
+}
+
+#main {
+  flex: 1;
+  padding: 20px;
+  overflow-y: auto;
+}
+
+.page-section {
+  display: none;
+}
+
+.page-section.active {
+  display: block;
+}
+
+.page-header h1,
+.page-header h2 {
+  margin: 0 0 6px 0;
+}
+
+.page-sub {
+  margin: 0 0 16px 0;
+  color: #9ca3af;
+  font-size: 14px;
+}
+
+.unified-area {
+  background: #020617;
+  border-radius: 10px;
+  padding: 16px;
+  border: 1px solid #1f2937;
+}
+
+.upload-area {
+  border: 1px dashed #374151;
+  border-radius: 8px;
+  padding: 24px;
+  text-align: center;
+  background: #020617;
+}
+
+.upload-area.drag-over {
+  border-color: #38bdf8;
+  background: #0b1120;
+}
+
+.upload-icon {
+  font-size: 32px;
+  margin-bottom: 8px;
+}
+
+.upload-link {
+  color: #38bdf8;
+  cursor: pointer;
+}
+
+.upload-hint {
+  margin-top: 6px;
+  color: #64748b;
+  font-size: 13px;
+}
+
+.or-divider {
+  text-align: center;
+  margin: 16px 0;
+  color: #64748b;
+  font-size: 13px;
+}
+
+#paste-code {
+  width: 100%;
+  background: #020617;
+  color: #e5e7eb;
+  border-radius: 6px;
+  border: 1px solid #1f2937;
+  padding: 8px;
+  font-family: "JetBrains Mono", monospace;
+}
+
+.btn {
+  border: none;
+  border-radius: 6px;
+  padding: 10px 16px;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.btn-primary {
+  background: #38bdf8;
+  color: #020617;
+}
+
+.btn-secondary {
+  background: #1f2937;
+  color: #e5e7eb;
+}
+
+.btn-lg {
+  width: 100%;
+  margin-top: 10px;
+}
+
+.github-input-area {
+  margin-top: 8px;
+}
+
+.github-input-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: #020617;
+  border-radius: 6px;
+  border: 1px solid #1f2937;
+  padding: 6px 8px;
+}
+
+.github-input-row input {
+  flex: 1;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: #e5e7eb;
+}
+
+.radio-label {
+  margin-right: 12px;
+  font-size: 13px;
+  color: #9ca3af;
+}
+
+.card {
+  background: #020617;
+  border-radius: 8px;
+  border: 1px solid #1f2937;
+  padding: 12px 14px;
+  margin-bottom: 10px;
+}
+
+.summary-text {
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.control-card {
+  background: #020617;
+  border-radius: 8px;
+  border: 1px solid #1f2937;
+  padding: 10px 12px;
+  margin-bottom: 10px;
+}
+
+.control-header {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 6px;
+  font-size: 13px;
+}
+
+.control-reg {
+  background: #111827;
+  padding: 2px 6px;
+  border-radius: 4px;
+  color: #facc15;
+}
+
+.control-title {
+  font-weight: 600;
+}
+
+.control-conf {
+  margin-left: auto;
+  font-size: 12px;
+  color: #9ca3af;
+}
+
+.code-snippet {
+  background: #020617;
+  border-radius: 6px;
+  border: 1px solid #1f2937;
+  padding: 6px;
+  margin-top: 6px;
+  font-size: 12px;
+  overflow-x: auto;
+}
+
+.placeholder {
+  color: #6b7280;
+  font-size: 14px;
+}
+
+#loading-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.85);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 50;
+}
+
+.spinner-wrap {
+  text-align: center;
+}
+
+.spinner {
+  width: 40px;
+  height: 40px;
+  border-radius: 999px;
+  border: 4px solid #1f2937;
+  border-top-color: #38bdf8;
+  margin: 0 auto 12px auto;
+  animation: spin 0.9s linear infinite;
+}
+
+.loading-stages {
+  font-size: 13px;
+  color: #9ca3af;
+}
+
+.stage {
+  margin-bottom: 3px;
+}
+
+.stage.active {
+  color: #e5e7eb;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
