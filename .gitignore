@@ -4,11 +4,20 @@ __pycache__/
 *.pyo
 *.pyd
 *.so
+*.egg
+*.egg-info/
+.eggs/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
 
-# Virtual envs
+# Virtual environments
 .venv/
 venv/
 env/
+ENV/
+.virtualenvs/
+Pipfile.lock
 
 # OS / editor cruft
 .DS_Store
@@ -16,8 +25,11 @@ Thumbs.db
 .idea/
 .vscode/
 
-# Local config & secrets
+# Environment / secrets — all variants
 .env
+.env.*
+*.env
+!.env.example
 
 # Node / frontend
 node_modules/
@@ -26,4 +38,23 @@ build/
 
 # Logs
 *.log
+logs/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Misc
+*.bak
+*.swp
+*.tmp
 regulations/
+
+# Codacy CLI
+.codacy/
+
+# Example env (keep template, ignore if unwanted)
+.env.example
+
+# GitHub Copilot / repo instructions
+.github/copilot-instructions.md
+.github/instructions/
