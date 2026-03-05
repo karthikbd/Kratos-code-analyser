@@ -1,0 +1,82 @@
+# ── Secrets & API Keys ────────────────────────────────────────────────────────
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+secrets/
+credentials/
+
+# ── Python ────────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+*.egg
+dist/
+build/
+.eggs/
+.Python
+pip-log.txt
+pip-delete-this-directory.txt
+.venv/
+venv/
+env/
+ENV/
+.virtualenv/
+Pipfile.lock
+
+# ── Node / Frontend ───────────────────────────────────────────────────────────
+node_modules/
+frontend/node_modules/
+frontend/dist/
+frontend/build/
+frontend/.vite/
+*.tsbuildinfo
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ── Logs ─────────────────────────────────────────────────────────────────────
+logs/
+*.log
+*.log.*
+
+# ── FAISS / Vector Index (large binary, rebuild on deploy) ───────────────────
+data/faiss_index/
+*.faiss
+*.index
+
+# ── OS artefacts ─────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ── IDE ───────────────────────────────────────────────────────────────────────
+.vscode/settings.json
+.vscode/launch.json
+.vscode/*.code-snippets
+.idea/
+*.suo
+*.user
+
+# ── Workspace files (local only) ─────────────────────────────────────────────
+*.code-workspace
+
+# ── Archives ─────────────────────────────────────────────────────────────────
+operational_systems.zip
+*.zip
+*.tar.gz
+
+# ── Test / Coverage ───────────────────────────────────────────────────────────
+.coverage
+.pytest_cache/
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+
+# ── Codacy AI instructions (local tooling only) ───────────────────────────────
+.github/instructions/codacy.instructions.md

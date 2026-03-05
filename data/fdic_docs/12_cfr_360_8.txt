@@ -1,0 +1,49 @@
+12 CFR 360.8 - Method for Determining Deposit Insurance Coverage
+in Connection with Certain Deposit Accounts
+
+Section 360.8(a) - Scope
+This section applies to all insured depository institutions and describes
+the FDIC's method for determining deposit insurance coverage.
+
+Section 360.8(b) - Close of Business
+Insurance coverage is determined as of the close of business on the
+date of the institution's failure. Interest accrual through close of
+business must be included in the balance calculation.
+
+Section 360.8(c) - Aggregation
+(1) All deposits maintained by a depositor in the same ownership right
+and capacity at the same insured institution are aggregated.
+(2) Aggregation must occur BEFORE applying the SMDIA limit.
+(3) The order of operations is:
+    Step 1: Identify all accounts for each unique depositor
+    Step 2: Group accounts by ORC type
+    Step 3: Sum balances within each depositor+ORC group
+    Step 4: Apply SMDIA limit ($250,000) to each group
+    Step 5: Calculate insured and uninsured amounts
+
+Section 360.8(d) - Death of Account Owner
+Upon the death of a joint account owner:
+(1) For 6 months following the date of death, the deceased owner's
+    share continues to be insured as JNT.
+(2) After 6 months, the deceased owner's share is reclassified to
+    SGL ownership and aggregated with the surviving depositor's
+    other SGL accounts.
+(3) The 6-month grace period is measured from the date of death,
+    not from the date the institution is notified.
+
+Section 360.8(e) - Debt Offset
+(1) Outstanding debts owed by a depositor to the institution may
+    be offset against the depositor's insured deposits.
+(2) Credit card balances MUST BE EXCLUDED from debt offset.
+(3) Offset is applied after insurance determination.
+(4) Debt flag must be set on all accounts where the depositor
+    has outstanding qualifying debt.
+
+Section 360.8(f) - Account Restriction
+Upon failure, the institution must restrict affected deposit accounts
+within the timeframe specified in Part 370 (24 hours).
+
+Section 360.8(g) - Record Requirements
+The institution must maintain records sufficient to determine
+insurance coverage for each depositor as of the close of business
+on any given day.

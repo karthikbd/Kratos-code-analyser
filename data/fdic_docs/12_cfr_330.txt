@@ -1,0 +1,95 @@
+12 CFR Part 330 - Deposit Insurance Coverage
+
+Section 330.1 - Scope
+This part implements the provisions of the Federal Deposit Insurance Act
+relating to the insurance of deposits.
+
+Section 330.3 - General Principles
+(a) Insurance coverage is determined on the basis of the depositor's
+ownership right and capacity in which deposit accounts are maintained.
+(b) The SMDIA is $250,000 per depositor, per insured institution, for
+each account ownership category.
+(c) Funds owned by the same depositor in different ownership categories
+are insured separately.
+
+Section 330.5 - Recognition of Deposit Ownership
+(a) The FDIC will presume that deposits held in an individual's name
+belong to that individual unless otherwise indicated by the deposit
+account records of the insured institution.
+
+Section 330.6 - Single Ownership Accounts (SGL)
+(a) All deposits in an insured institution owned by a single person
+in the person's own right are added together and insured up to the SMDIA.
+(b) This includes demand deposits, savings deposits, time deposits,
+and any other deposits.
+Required fields: owner_name, owner_ssn_tin
+Fallback: If ORC cannot be determined, default to SGL.
+
+Section 330.7 - Joint Ownership Accounts (JNT)
+(a) Each co-owner's interest in all joint accounts at the same institution
+is added together and insured up to the SMDIA.
+(b) A joint account must meet the following requirements:
+    (1) Each co-owner must be a natural person
+    (2) Each co-owner must have personally signed a deposit account
+        signature card
+    (3) All co-owners must have equal withdrawal rights
+Required fields: all_co_owners, signature_card_on_file
+Special rule: Upon death of one co-owner, the deceased's share is
+treated as SGL for 6 months after the date of death (360.8 temporal logic).
+
+Section 330.9 - Revocable Trust Accounts (REV)
+(a) Coverage is $250,000 per qualifying beneficiary.
+(b) The owner must identify all beneficiaries.
+(c) Valid trust documentation must be on file.
+Required fields: beneficiary_list, trust_document_reference
+
+Section 330.10 - Irrevocable Trust Accounts (IRR)
+(a) Coverage is $250,000 per non-contingent ascertainable beneficiary.
+(b) The trust must be irrevocable and the beneficiary interests must
+be clearly defined in the trust instrument.
+Required fields: beneficiary_list, trust_document_reference
+
+Section 330.12 - Certain Retirement Accounts (CRA)
+(a) Deposits in IRAs, Keogh plans, and certain other retirement accounts
+are insured up to $250,000 per depositor.
+Required fields: retirement_account_type, plan_administrator
+
+Section 330.11 - Business/Organization Accounts (BUS)
+(a) Deposits owned by a corporation, partnership, or unincorporated
+association are insured up to $250,000.
+Required fields: ein_tin, entity_type, authorized_signers
+
+Section 330.14 - Employee Benefit Plan Accounts (EBP)
+(a) Coverage is $250,000 per participant in the plan.
+(b) The plan must be a bona fide employee benefit plan.
+Required fields: plan_participants, plan_type, employer_ein
+
+Section 330.15 - Government Deposit Accounts
+(a) GOV1 - Federal government deposits: fully insured without limit
+    by U.S. government guarantee.
+(b) GOV2 - State and municipal deposits: insured if collateralized
+    per state law requirements. Required: collateral_amount,
+    collateral_documentation, pledging_institution.
+(c) GOV3 - Tribal government deposits: insured under the Indian
+    Self-Determination Act provisions.
+Collateral requirement: Government deposits (GOV1/GOV2/GOV3) must
+have verified collateral documentation on file.
+
+Section 330.16 - Annuity Contract Accounts (ANC)
+(a) Deposits held in connection with annuity contracts are insured
+up to $250,000.
+
+ORC Qualification Rules Summary:
+| ORC  | Limit      | Key Requirements                      |
+|------|------------|---------------------------------------|
+| SGL  | $250,000   | owner_name, ssn_tin                   |
+| JNT  | $250,000/ea| co_owners, signature_card             |
+| REV  | $250K/ben  | beneficiaries, trust_doc              |
+| IRR  | $250K/ben  | beneficiaries, trust_doc              |
+| CRA  | $250,000   | retirement_type, plan_admin           |
+| BUS  | $250,000   | ein_tin, entity_type                  |
+| EBP  | $250K/part | participants, plan_type               |
+| GOV1 | Unlimited  | govt_entity, collateral               |
+| GOV2 | Unlimited  | govt_entity, collateral, state_law    |
+| GOV3 | Unlimited  | tribal_entity, collateral             |
+| ANC  | $250,000   | annuity_contract_ref                  |

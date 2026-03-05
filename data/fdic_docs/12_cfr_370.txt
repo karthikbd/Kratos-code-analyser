@@ -1,0 +1,103 @@
+12 CFR Part 370 - Recordkeeping for Timely Deposit Insurance Determination
+
+Section 370.1 - Purpose and Scope
+Each covered institution must implement and maintain an information technology
+system capable of calculating the deposit insurance coverage for each depositor
+by ownership right and capacity (ORC) within 24 hours after the institution's
+failure. This regulation applies to all insured depository institutions with
+2 million or more deposit accounts.
+
+Section 370.2 - Definitions
+(a) "Covered institution" means an insured depository institution that has
+2 million or more deposit accounts.
+(b) "Deposit account" means a deposit as defined in 12 U.S.C. 1813(l).
+(c) "Ownership right and capacity" (ORC) means the legal basis under which
+deposit insurance coverage is provided pursuant to 12 CFR Part 330.
+(d) "Standard maximum deposit insurance amount" (SMDIA) means $250,000.
+(e) "Pending" means an account for which the covered institution's IT system
+cannot determine deposit insurance coverage using the covered institution's
+data and information within 24 hours of failure.
+(f) "Unique identifier" means a number used to identify each depositor.
+
+Section 370.3 - Requirements
+(a) Each covered institution must maintain complete and accurate data for
+each depositor, including the depositor's unique identifier, ownership
+right and capacity, and the balance of each deposit.
+(b) Data must be current as of the close of business each day.
+(c) The IT system must be capable of:
+    (1) Aggregating deposit balances by depositor and ORC
+    (2) Applying the SMDIA limit to each aggregated balance
+    (3) Generating output files in the format specified by the FDIC
+    (4) Processing Additional Record Entity (ARE) files
+
+Section 370.4 - Output Files
+(a) Customer File - contains depositor identity information
+(b) Account File - contains account details, ORC, and calculated insurance
+(c) Account Participant File - contains information about beneficial owners
+(d) Pending File - contains accounts that could not be fully resolved
+All files must be pipe-delimited ASCII text files.
+
+Section 370.5 - Pending Accounts
+(a) An account is pending when the covered institution cannot determine
+the deposit insurance coverage within 24 hours.
+(b) Pending reasons include: Right and Capacity not determinable (RAC),
+Beneficiary information incomplete (BEN), ORC classification uncertain (ORC),
+Potential duplicate (DUP), Government entity collateral issue (GOV),
+Account linkage discrepancy (LNK), Merger data issue (MRG),
+Timing difference (TIM), Data quality exception (DAT),
+Additional Record Entity discrepancy (ARE).
+
+Section 370.6 - ARE File Processing
+(a) Additional Record Entity files contain information about additional
+owners or beneficiaries of deposit accounts.
+(b) ARE files must conform to the 29-field specification.
+(c) Processing must be iterative and idempotent - the system must be
+capable of processing multiple ARE file submissions without duplicate
+calculations.
+
+Section 370.7 - Testing Requirements
+(a) Covered institutions must conduct annual testing of the IT system.
+(b) Testing must include:
+    (1) Verification of ORC assignment logic for all 11 ORC types
+    (2) Accuracy of insurance calculations
+    (3) Completeness of output files
+    (4) Processing of ARE files
+    (5) 24-hour completion capability
+
+Section 370.8 - Interest Accrual
+Interest must be calculated through the close of business on the day
+of the institution's failure, consistent with 12 CFR 360.8.
+
+Section 370.9 - Debt Offset
+(a) The institution must identify all outstanding debts owed by depositors.
+(b) Credit card balances must be excluded from debt offset calculations.
+(c) Offset amounts must be applied after aggregation by depositor and ORC.
+
+Section 370.10 - Certification
+(a) The board of directors of each covered institution must certify
+annually that the institution is in compliance with this part.
+(b) The certification must be filed with the FDIC within 10 business
+days after the end of each calendar year.
+(c) Certification must include:
+    (1) Confirmation that the IT system can produce the required output
+    (2) Results of annual testing
+    (3) Any identified deficiencies and remediation plans
+
+Section 370.11 - Record Retention
+All records must be maintained for 5 years from the date of creation.
+
+Appendix A - Output File Specifications
+Customer File Fields: customer_id, first_name, last_name, ssn_tin,
+date_of_birth, address, city, state, zip, phone, email, customer_type
+Account File Fields: account_id, customer_id, account_type, orc_type,
+balance, insured_amount, uninsured_amount, institution_id
+Account Participant File Fields: account_id, participant_id,
+participant_type, ownership_share
+Pending File Fields: account_id, pending_reason_code, pending_description
+
+Appendix B - Annual Certification Format
+The certification report must include:
+(1) Per-ORC completeness scores
+(2) Pending file summary by reason code
+(3) Data quality exception log with root causes
+(4) Test execution results with timestamps

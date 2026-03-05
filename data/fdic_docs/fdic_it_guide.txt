@@ -1,0 +1,146 @@
+FDIC IT Functional Guide for Part 370 Compliance - Version 3.0 (June 2023)
+
+Section 1 - Overview
+This guide provides technical specifications for covered institutions
+implementing IT systems to comply with 12 CFR Part 370.
+
+Section 2 - Data Requirements
+Section 2.1 - Data Sources
+The IT system must ingest data from all core banking systems,
+including demand deposit accounts, savings accounts, certificates
+of deposit, trust accounts, and retirement accounts.
+
+Section 2.2 - Data Quality
+(a) All depositor records must have a valid unique identifier (SSN/TIN).
+(b) Duplicate depositor records must be identified and resolved.
+(c) Data quality exceptions must be logged and reported.
+
+Section 2.3 - Data Completeness
+Section 2.3.1 - Required Fields
+Every deposit account must have: account_id, customer_id, account_type,
+balance, orc_type, institution_id.
+
+Section 2.3.2 - Orphan Detection
+(a) Orphan accounts: accounts with no matching customer record.
+(b) Orphan participants: participant records with no matching account.
+(c) Both must be flagged and routed to the Pending File.
+
+Section 2.3.3 - ORC-Conditional Fields
+Certain fields are required only for specific ORC types:
+- REV/IRR: beneficiary information must be present
+- JNT: all co-owner information and signature card status
+- GOV1/GOV2/GOV3: collateral documentation
+- EBP: participant roster
+- BUS: entity documentation (EIN/TIN)
+Accounts missing ORC-conditional fields must be routed to Pending.
+
+Section 3 - ORC Assignment
+Section 3.1 - Classification Logic
+The ORC assignment engine must evaluate each account against the
+11 recognized ownership categories defined in 12 CFR Part 330.
+
+Section 3.2 - Default Assignment
+If the system cannot determine the ORC, the account MUST default
+to Single Ownership (SGL) as the most conservative classification.
+A pending reason code of RAC must be assigned.
+
+Section 3.3 - Validation
+ORC assignments must be validated against the qualification rules
+for each ORC type (see Part 330 sections 6-16).
+
+Section 4 - ORC Assignment Logic Analysis
+Section 4.1 - Static Analysis Requirements
+Code implementing ORC assignment must be analyzed to verify:
+(a) All 11 ORC types are covered in the branching logic
+(b) Default/fallback to SGL is properly implemented
+(c) Pending reason codes are correctly assigned
+(d) Qualification rules for each ORC type are enforced
+
+Section 5 - Output File Specifications
+Section 5.1 - File Format
+All output files must be pipe-delimited ASCII text files.
+No binary formats, no XML, no JSON.
+
+Section 5.2 - Four Required Files
+(a) Customer File (CF) - depositor identity records
+(b) Account File (AF) - account balances and insurance calculations
+(c) Account Participant File (APF) - beneficial ownership
+(d) Pending File (PF) - unresolvable accounts with reason codes
+
+Section 5.3 - Data Lineage
+Output files must maintain data lineage back to source systems.
+No truncation of data fields is permitted during transformation.
+
+Section 5.4 - Pending File Population
+Every account that cannot be fully resolved must appear in the
+Pending File with an appropriate reason code (RAC, BEN, ORC, DUP,
+GOV, LNK, MRG, TIM, DAT, ARE).
+
+Section 6 - Calculation Engine
+Section 6.1 - Aggregation
+The calculation engine must aggregate deposit balances by:
+(1) Unique depositor identifier
+(2) Ownership right and capacity
+BEFORE applying the $250,000 SMDIA limit.
+
+Section 6.2 - Interest
+Interest must be calculated through close of business on the
+failure date per 12 CFR 360.8.
+
+Section 6.3 - Debt Offset
+Credit card debt must be excluded. Other qualifying debts must
+be offset after insurance determination.
+
+Section 7 - ARE File Processing
+Section 7.1 - File Format
+ARE files must conform to the 29-field specification.
+
+Section 7.2 - Processing Requirements
+(a) ARE file processing must be iterative
+(b) Processing must be idempotent (no duplicate calculations)
+(c) Multiple ARE files may arrive in sequential batches
+(d) The system must recalculate without full restart
+
+Section 8 - Performance Requirements
+Section 8.1 - 24-Hour Rule
+The complete deposit insurance determination process, including
+output file generation, must complete within 24 hours.
+
+Section 8.2 - Account Restriction
+Affected accounts must be restricted immediately upon notification
+of the institution's failure.
+
+Section 9 - Disaster Recovery
+The system must maintain a point-in-time consistent snapshot
+for disaster recovery purposes. Replication replicas are not
+sufficient; a consistent snapshot is required.
+
+Section 10 - Testing
+Annual testing must verify:
+(a) ORC assignment correctness for all 11 types
+(b) Calculation accuracy (aggregation, SMDIA application)
+(c) Output file completeness and format compliance
+(d) ARE file processing capability
+(e) 24-hour completion capability
+(f) Disaster recovery failover
+
+Appendix A - Field Specifications
+Customer File: 12 fields including customer_id, name, SSN/TIN
+Account File: 8 fields including account_id, ORC, insured_amount
+Participant File: 4 fields including ownership_share
+Pending File: 3 fields including pending_reason_code
+ARE File: 29 fields (detailed specification in separate document)
+
+Appendix B - Certification Report Format
+Required sections:
+(1) Executive Summary
+(2) Per-ORC completeness scores
+(3) Pending file summary by reason code
+(4) Data quality exception log with root causes
+(5) Test execution results with timestamps
+(6) Board of directors attestation
+
+Appendix C - Credit Balance Processing
+Credit balances on debt accounts (e.g., overpaid loans) must be
+processed as additional deposits and included in insurance
+calculations within the ARE framework.
