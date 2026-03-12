@@ -1,7 +1,7 @@
 import { memo, useMemo } from 'react';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
 import { motion } from 'framer-motion';
-import { Shield, AlertTriangle, CheckCircle, XCircle, Loader2 } from 'lucide-react';
+import { Shield, CheckCircle, XCircle, Loader2 } from 'lucide-react';
 import type { AgentDef } from '../types';
 
 /** Custom React Flow node representing a single analyzer agent */

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
-import { Play, Shield, Database, Zap, BookOpen, GitBranch, Layers, Server, FolderSearch, Share2 } from 'lucide-react';
+import { Play, Shield, Database, Zap, BookOpen, GitBranch, Layers, Server, FolderSearch, Share2, ClipboardList } from 'lucide-react';
 import { useWebSocket } from './hooks/useWebSocket';
 import { PipelineFlow } from './components/PipelineFlow';
 import { AgentCards } from './components/AgentCards';
@@ -12,7 +12,7 @@ import type { OperationalSystem } from './types';
 const API_BASE = (import.meta.env.VITE_WS_URL || 'ws://localhost:8001/ws')
   .replace('ws://', 'http://').replace('wss://', 'https://').replace('/ws', '');
 
-type Tab = 'controls' | 'pipeline' | 'lineage' | 'details' | 'events';
+type Tab = 'controls' | 'checklist' | 'pipeline' | 'lineage' | 'details' | 'events';
 
 export default function App() {
   const { state, startRun } = useWebSocket();
@@ -70,6 +70,7 @@ export default function App() {
 
   const TAB_ITEMS: { id: Tab; label: string; icon: typeof Shield }[] = [
     { id: 'controls', label: 'Compliance Report', icon: BookOpen },
+    { id: 'checklist', label: 'FDIC Checklist', icon: ClipboardList },
     { id: 'pipeline', label: 'Analysis Pipeline', icon: GitBranch },
     { id: 'lineage', label: 'Data Lineage', icon: Share2 },
     { id: 'details', label: 'Detailed Findings', icon: Layers },
@@ -287,7 +288,11 @@ export default function App() {
 
         {/* Tab Content */}
         {activeTab === 'controls' && (
-          <ControlLibrary pipelineStatus={state.status} selectedSystem={selectedSystem} agents={state.agents} />
+          <ControlLibrary pipelineStatus={state.status} selectedSystem={selectedSystem} agents={state.agents} mode="evidence" />
+        )}
+
+        {activeTab === 'checklist' && (
+          <ControlLibrary pipelineStatus={state.status} selectedSystem={selectedSystem} mode="checklist" />
         )}
 
         {activeTab === 'pipeline' && (
@@ -333,7 +338,7 @@ export default function App() {
         borderTop: '1px solid #2a3350',
         fontSize: 11, color: '#6b7280', textAlign: 'center',
       }}>
-        Kratos Code Analyzer v1.0.0 — FDIC Part 370 / 12 CFR Part 330 / FDIC IT Guide v3.0 — {state.agents.length} Layers{state.summary ? ` | ${state.summary.total_controls} Controls` : ''}
+        Kratos Code Analyzer v1.0.0 — FDIC Part 370 / 12 CFR Part 330 / FDIC IT Guide v3.0 — {state.agents.length} Layers{state.summary ? ` | ${state.summary.total} findings` : ''}
       </footer>
     </div>
   );
