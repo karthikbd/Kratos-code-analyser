@@ -1245,14 +1245,21 @@ function RagControlRow({ control, index, expanded, onToggle }: {
         {/* Section ID */}
         <div style={{
           minWidth: 90, fontSize: 12, fontWeight: 700, color: '#8b5cf6',
-          fontFamily: "'JetBrains Mono', monospace",
+          fontFamily: "'JetBrains Mono', monospace", flexShrink: 0,
         }}>
           §{control.section}
         </div>
 
-        {/* Regulation */}
-        <div style={{ flex: 1, fontSize: 13, color: '#e5e7eb', fontWeight: 500 }}>
-          {control.regulation}
+        {/* Title + Regulation */}
+        <div style={{ flex: 1, minWidth: 0 }}>
+          {control.title
+            ? <div style={{ fontSize: 13, fontWeight: 600, color: '#e5e7eb', lineHeight: 1.3 }}>
+                {control.title}
+              </div>
+            : null}
+          <div style={{ fontSize: 11, color: '#6b7280', marginTop: control.title ? 2 : 0 }}>
+            {control.regulation}
+          </div>
         </div>
 
         {/* RAG badge */}
@@ -1316,6 +1323,18 @@ function RagControlRow({ control, index, expanded, onToggle }: {
                   <span style={{ color: '#10b981', fontWeight: 600 }}>RAG Vector Analysis</span>
                 </div>
               </div>
+
+              {/* What this section requires */}
+              {control.description && (
+                <div style={{
+                  padding: '8px 12px', borderRadius: 8,
+                  background: 'rgba(139,92,246,0.06)', border: '1px solid rgba(139,92,246,0.15)',
+                  fontSize: 11, color: '#c4b5fd', lineHeight: 1.6,
+                }}>
+                  <span style={{ fontWeight: 700, color: '#a78bfa', marginRight: 6 }}>What this requires:</span>
+                  {control.description}
+                </div>
+              )}
 
               {/* Code References */}
               {refCount > 0 ? (

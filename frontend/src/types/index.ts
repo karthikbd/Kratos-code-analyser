@@ -109,6 +109,8 @@ export interface ControlValidationResponse {
 
 export interface RagControl {
   section: string;
+  title?: string;
+  description?: string;
   severity: string;
   regulation: string;
   code_references: { file: string; line: number; text: string }[];

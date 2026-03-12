@@ -1150,15 +1150,33 @@ async def rag_comparison(system_id: str = ""):
     from backend.controls import CONTROL_LIBRARY
     from backend.rag import EMBEDDED_REGULATORY_TEXT
 
-    # Extract unique sections from RAG regulatory documents
+    # Extract unique sections AND titles/descriptions from RAG regulatory documents
     rag_sections: set[str] = set()
+    rag_section_info: dict[str, dict] = {}  # section_id -> {title, description}
+
     for doc_id, text in EMBEDDED_REGULATORY_TEXT.items():
-        for m in _re.finditer(r'Section\s+(\d+\.\d+(?:\.\d+)?(?:\([a-z]\))?)', text):
-            rag_sections.add(m.group(1))
+        # Primary: "Section X.Y - Title\n<body text>" — capture ID, title, first ~250 chars of body
+        for m in _re.finditer(
+            r'Section\s+(\d+\.\d+(?:\.\d+)?(?:\([a-z]\))?)\s*[-\u2013]\s*([^\n]+)\n((?:(?!Section\s+\d|\.\.\.)[^\n]*\n?){0,5})',
+            text,
+        ):
+            sec = m.group(1)
+            title = m.group(2).strip()
+            body = _re.sub(r'\s+', ' ', m.group(3)).strip()[:260]
+            rag_sections.add(sec)
+            if sec not in rag_section_info:  # first match wins
+                rag_section_info[sec] = {"title": title, "description": body}
+
+        # Secondary: bare CFR references that appear in body text (no title available)
         for m in _re.finditer(r'(\d{3}\.\d+(?:\([a-z]\))?)', text):
             rag_sections.add(m.group(1))
-        for m in _re.finditer(r'Appendix\s+([A-Z](?:\(\d+\))?)', text):
-            rag_sections.add('Appendix ' + m.group(1))
+
+        # Appendix entries with optional titles
+        for m in _re.finditer(r'Appendix\s+([A-Z](?:\(\d+\))?)\s*[-\u2013]?\s*([^\n]*)', text):
+            sec = 'Appendix ' + m.group(1)
+            rag_sections.add(sec)
+            if sec not in rag_section_info and m.group(2).strip():
+                rag_section_info[sec] = {"title": m.group(2).strip(), "description": ""}
 
     # Scope control sections to applicable controls for this system (if available)
     if system_id and system_id in _system_results:
@@ -1276,12 +1294,22 @@ async def rag_comparison(system_id: str = ""):
                     })
                     break  # one reference per file is enough
 
+        info = rag_section_info.get(section, {})
         rag_only_classified.append({
             "section": section,
+            "title": info.get("title", ""),
+            "description": info.get("description", ""),
             "severity": severity,
             "regulation": regulation,
             "code_references": code_refs,
         })
+
+    # Sort by severity then section ID so CRITICAL items appear first
+    _sev_order = {"CRITICAL": 0, "HIGH": 1, "MEDIUM": 2, "LOW": 3}
+    rag_only_classified.sort(key=lambda x: (_sev_order.get(x["severity"], 9), x["section"]))
+
+    # Real overlap ratio: sections that appear in BOTH the regulatory docs and the control library
+    real_coverage_pct = round(len(overlap) / max(len(rag_sections), 1) * 100, 1)
 
     return {
         "rag_sections_count": len(rag_sections),
@@ -1299,13 +1327,13 @@ async def rag_comparison(system_id: str = ""):
             "MEDIUM": sum(1 for r in rag_only_classified if r["severity"] == "MEDIUM"),
             "LOW": sum(1 for r in rag_only_classified if r["severity"] == "LOW"),
         },
-        "semantic_coverage_pct": 100.0,
+        "semantic_coverage_pct": real_coverage_pct,
         "note": (
-            f"All {len(scoped_controls)} applicable controls are semantically validated by RAG via FAISS similarity search (100% coverage). "
-            "Exact section overlap is lower because controls use sub-sections (e.g. 370.3(b)) "
-            "while RAG documents contain parent sections (e.g. 370.3). "
-            "The 'Extra in RAG' sections provide regulatory context for AI agents even though "
-            "no specific control directly tests them."
+            f"{len(overlap)} of {len(rag_sections)} regulatory sections found in the control library "
+            f"({real_coverage_pct}% section-level coverage). Controls use fine-grained sub-sections "
+            "(e.g. 370.3(b)) while the RAG text also contains parent section IDs (e.g. 370.3), "
+            "so actual compliance scope is broader than the numeric overlap suggests. "
+            "The 'Extra in RAG' sections are regulatory topics not explicitly covered by any control."
         ),
     }
 
