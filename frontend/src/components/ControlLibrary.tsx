@@ -5,7 +5,7 @@ import {
   ChevronDown, ChevronRight, Database, Loader2, BookOpen,
   Filter, FileCode2, Radar, Lock, Download,
 } from 'lucide-react';
-import type { FDICControl, ControlSummary, ControlValidationResult, RagControl, RagComparisonData } from '../types';
+import type { FDICControl, ControlSummary, ControlValidationResult, RagControl, RagComparisonData, AgentDef } from '../types';
 
 const API_BASE = (import.meta.env.VITE_WS_URL || 'ws://localhost:8001/ws')
   .replace('ws://', 'http://').replace('wss://', 'https://').replace('/ws', '');
@@ -34,9 +34,11 @@ const CATEGORY_COLORS: Record<string, string> = {
 interface ControlLibraryProps {
   pipelineStatus: string;
   selectedSystem: string;
+  /** Layer 0 agent output — used to show "what we found in code vs FDIC requirement" table */
+  agents?: AgentDef[];
 }
 
-export function ControlLibrary({ pipelineStatus, selectedSystem }: ControlLibraryProps) {
+export function ControlLibrary({ pipelineStatus, selectedSystem, agents = [] }: ControlLibraryProps) {
   const [controls, setControls] = useState<FDICControl[]>([]);
   const [summary, setSummary] = useState<ControlSummary | null>(null);
   const [validationResults, setValidationResults] = useState<ControlValidationResult[]>([]);
@@ -193,10 +195,10 @@ export function ControlLibrary({ pipelineStatus, selectedSystem }: ControlLibrar
         }}>
           <BookOpen size={32} color="#3b82f6" />
         </div>
-        <div style={{ fontSize: 18, fontWeight: 700, color: '#e5e7eb' }}>FDIC Control Library</div>
+        <div style={{ fontSize: 18, fontWeight: 700, color: '#e5e7eb' }}>Compliance Report</div>
         <div style={{ fontSize: 13, color: '#6b7280', textAlign: 'center', maxWidth: 420, lineHeight: 1.6 }}>
-          Run the AI analysis pipeline to populate the control library with regulatory compliance results,
-          severity breakdowns, and RAG coverage data.
+          Run the AI analysis to check your system's code against FDIC compliance rules.
+          Results will appear here with a breakdown of what passed and what needs attention.
         </div>
         <div style={{
           display: 'flex', alignItems: 'center', gap: 8,
@@ -204,7 +206,7 @@ export function ControlLibrary({ pipelineStatus, selectedSystem }: ControlLibrar
           padding: '8px 16px', borderRadius: 8, border: '1px solid #3b82f630',
         }}>
           <Shield size={14} />
-          <span>Click <strong>Analyze Compliance</strong> above to start</span>
+          <span>Click <strong>Analyze</strong> above to start</span>
         </div>
       </motion.div>
     );
@@ -240,9 +242,170 @@ export function ControlLibrary({ pipelineStatus, selectedSystem }: ControlLibrar
     );
   }
 
+  // ── Extract Layer 0 evidence findings ──────────────────────────────
+  const layer0Agent = agents.find(a => a.id === 'layer0' || a.layer === 0);
+  const layer0Findings = (layer0Agent?.findings ?? []).filter(
+    f => f.evidence && (f.evidence.code_value !== undefined || f.evidence.required_value !== undefined)
+  );
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      {/* Sub-Tab Switcher: System Controls / RAG Controls */}
+
+      {/* ═══ LAYER 0 EVIDENCE BOX — What we found in code vs FDIC requirement ═══ */}
+      {layer0Agent && layer0Agent.status !== 'skipped' && layer0Findings.length > 0 && (
+        <div style={{
+          background: 'linear-gradient(135deg, #0a0f1e, #111827)',
+          borderRadius: 14, border: '2px solid #2a3350',
+          overflow: 'hidden',
+        }}>
+          {/* Header */}
+          <div style={{
+            padding: '14px 20px', display: 'flex', alignItems: 'center', gap: 12,
+            borderBottom: '1px solid #2a3350',
+            background: 'linear-gradient(90deg, rgba(59,130,246,0.08), rgba(139,92,246,0.04))',
+          }}>
+            <FileCode2 size={18} color="#3b82f6" />
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 14, fontWeight: 800, color: '#e5e7eb' }}>
+                What We Found In Your Code vs What FDIC Requires
+              </div>
+              <div style={{ fontSize: 11, color: '#6b7280', marginTop: 2 }}>
+                We scanned {layer0Agent.description ?? 'your code'} and automatically extracted{' '}
+                <strong style={{ color: '#60a5fa' }}>{layer0Findings.length} compliance parameters</strong>.{' '}
+                Here is how they compare to FDIC requirements.
+              </div>
+            </div>
+            <span style={{
+              padding: '3px 10px', borderRadius: 8, fontSize: 11, fontWeight: 700,
+              background: 'rgba(59,130,246,0.12)', border: '1px solid rgba(59,130,246,0.25)',
+              color: '#3b82f6',
+            }}>
+              {layer0Findings.filter(f => f.evidence?.gap).length} gaps found
+            </span>
+          </div>
+
+          {/* Table header */}
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: '200px 1fr 1fr 110px',
+            gap: 0, padding: '8px 20px',
+            background: '#0d1117',
+            borderBottom: '1px solid #1a2030',
+          }}>
+            {["WHAT WE'RE CHECKING", 'FOUND IN YOUR CODE', 'FDIC REQUIRES', 'STATUS'].map(h => (
+              <span key={h} style={{ fontSize: 10, fontWeight: 700, color: '#4b5563', letterSpacing: 1 }}>{h}</span>
+            ))}
+          </div>
+
+          {/* Rows */}
+          <div style={{ maxHeight: 420, overflowY: 'auto' }}>
+            {layer0Findings.map((f, idx) => {
+              const ev = f.evidence ?? {};
+              const hasGap = !!ev.gap;
+              const sev = f.severity ?? 'INFO';
+              const sevColor = SEVERITY_COLORS[sev] ?? '#6b7280';
+              const paramLabel = (ev.parameter ?? f.title ?? 'Unknown')
+                .replace(/_/g, ' ')
+                .replace(/\b\w/g, (c: string) => c.toUpperCase());
+              return (
+                <div
+                  key={idx}
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: '200px 1fr 1fr 110px',
+                    gap: 0, padding: '10px 20px',
+                    borderBottom: '1px solid #1a2030',
+                    background: idx % 2 === 0 ? 'transparent' : '#0d111a',
+                    alignItems: 'start',
+                  }}
+                >
+                  {/* What we're checking */}
+                  <div style={{ paddingRight: 8 }}>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: '#d1d5db' }}>{paramLabel}</div>
+                    {ev.code_file && (
+                      <div style={{ fontSize: 10, color: '#4b5563', marginTop: 2, fontFamily: 'monospace' }}>
+                        {ev.code_file}{ev.code_line ? `:${ev.code_line}` : ''}
+                      </div>
+                    )}
+                    {f.cfr_reference && (
+                      <div style={{ fontSize: 10, color: '#8b5cf6', marginTop: 2 }}>{f.cfr_reference}</div>
+                    )}
+                  </div>
+
+                  {/* Found in code */}
+                  <div style={{ paddingRight: 8 }}>
+                    <span style={{
+                      display: 'inline-block',
+                      padding: '3px 10px', borderRadius: 6, fontSize: 12, fontWeight: 700,
+                      background: hasGap ? 'rgba(239,68,68,0.1)' : 'rgba(16,185,129,0.1)',
+                      border: `1px solid ${hasGap ? 'rgba(239,68,68,0.25)' : 'rgba(16,185,129,0.25)'}`,
+                      color: hasGap ? '#ef4444' : '#10b981',
+                      fontFamily: 'monospace',
+                    }}>
+                      {ev.code_value ?? 'Not found in code'}
+                    </span>
+                    {ev.code_context && (
+                      <div style={{
+                        marginTop: 4, fontSize: 10, color: '#4b5563',
+                        fontFamily: 'monospace', whiteSpace: 'pre-wrap', maxWidth: 280,
+                      }}>
+                        {ev.code_context}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* FDIC requires */}
+                  <div style={{ paddingRight: 8 }}>
+                    <span style={{
+                      display: 'inline-block',
+                      padding: '3px 10px', borderRadius: 6, fontSize: 12, fontWeight: 700,
+                      background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.25)',
+                      color: '#10b981', fontFamily: 'monospace',
+                    }}>
+                      {ev.required_value ?? '—'}
+                    </span>
+                    {ev.gap && (
+                      <div style={{ marginTop: 4, fontSize: 10, color: '#9ca3af', lineHeight: 1.4, maxWidth: 280 }}>
+                        {ev.gap}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Status pill */}
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 4 }}>
+                    <span style={{
+                      padding: '3px 10px', borderRadius: 20, fontSize: 11, fontWeight: 800,
+                      background: `${sevColor}18`, border: `1px solid ${sevColor}40`,
+                      color: sevColor,
+                    }}>
+                      {hasGap ? '❌ ' : '✅ '}{hasGap ? sev : 'OK'}
+                    </span>
+                    {f.remediation_recommendation && (
+                      <div style={{ fontSize: 10, color: '#6b7280', lineHeight: 1.4 }}>
+                        {f.remediation_recommendation.slice(0, 80)}{f.remediation_recommendation.length > 80 ? '…' : ''}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* ── Placeholder if layer0 ran but produced no evidence ─────────── */}
+      {layer0Agent && layer0Agent.status === 'completed' && layer0Findings.length === 0 && (
+        <div style={{
+          padding: '14px 20px', borderRadius: 12,
+          background: 'rgba(107,114,128,0.07)', border: '1px solid #2a3350',
+          display: 'flex', alignItems: 'center', gap: 10, fontSize: 12, color: '#6b7280',
+        }}>
+          <FileCode2 size={14} color="#6b7280" />
+          Code scan completed — no hardcoded FDIC parameter values found in this system.
+        </div>
+      )}
+
+      {/* Sub-Tab Switcher: Control Analysis / Regulatory Coverage */}
       <div style={{ display: 'flex', gap: 0, background: '#111827', borderRadius: 12, border: '1px solid #2a3350', padding: 4 }}>
         <button
           onClick={() => setControlView('system')}
@@ -257,7 +420,7 @@ export function ControlLibrary({ pipelineStatus, selectedSystem }: ControlLibrar
           }}
         >
           <Shield size={16} color={controlView === 'system' ? '#3b82f6' : '#6b7280'} />
-          System Controls
+          Control Analysis
           {summary && (
             <span style={{
               padding: '2px 8px', borderRadius: 10, fontSize: 11, fontWeight: 700,
@@ -282,7 +445,7 @@ export function ControlLibrary({ pipelineStatus, selectedSystem }: ControlLibrar
             }}
           >
             <Radar size={16} color={controlView === 'rag' ? '#8b5cf6' : '#6b7280'} />
-            RAG Controls
+            Regulatory Coverage
             {ragComparison && (
               <span style={{
                 padding: '2px 8px', borderRadius: 10, fontSize: 11, fontWeight: 700,
@@ -295,7 +458,7 @@ export function ControlLibrary({ pipelineStatus, selectedSystem }: ControlLibrar
           </button>
         ) : (
           <div
-            title="Run 'Validate Against RAG' in System Controls to unlock this tab"
+            title="Click 'Check Against FDIC Rulebook' in the Control Analysis tab to unlock this view"
             style={{
               flex: 1, padding: '10px 16px', borderRadius: 8,
               background: 'transparent', color: '#374151',
@@ -306,7 +469,7 @@ export function ControlLibrary({ pipelineStatus, selectedSystem }: ControlLibrar
             }}
           >
             <Lock size={14} color="#374151" />
-            RAG Controls
+            Regulatory Coverage
             <span style={{
               padding: '2px 8px', borderRadius: 10, fontSize: 10, fontWeight: 600,
               background: '#1e2538', color: '#4b5563',
@@ -315,40 +478,28 @@ export function ControlLibrary({ pipelineStatus, selectedSystem }: ControlLibrar
         )}
       </div>
 
-      {/* ═══ SYSTEM CONTROLS TAB ═══ */}
+      {/* ═══ CONTROL ANALYSIS TAB ═══ */}
       {controlView === 'system' && (<>
-      {/* Summary Cards */}
+      {/* Summary — simplified scorecard replacing the 9 cards */}
       {summary && (
         <>
-          {/* Section Header */}
+          {/* One-line context header */}
           <div style={{
-            fontSize: 11, fontWeight: 700, color: '#6b7280', letterSpacing: 1.5,
+            display: 'flex', alignItems: 'center', gap: 8,
+            fontSize: 11, fontWeight: 700, color: '#6b7280', letterSpacing: 1.2,
             textTransform: 'uppercase', paddingBottom: 4,
             borderBottom: '1px solid #2a335050',
           }}>
-            FDIC Control Library — Regulatory Requirements Inventory
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10 }}>
-            <SummaryCard icon={<Shield size={20} />} label="APPLICABLE" value={summary.total_controls} color="#3b82f6" />
-            {controls.some(c => c.analysis_status === 'NOT_APPLICABLE') && (
-              <SummaryCard icon={<Shield size={20} />} label="NOT APPLICABLE" value={controls.filter(c => c.analysis_status === 'NOT_APPLICABLE').length} color="#6b7280" />
-            )}
-            {summary.verdict && (
-              <SummaryCard icon={<Shield size={20} />} label="VERDICT" value={summary.verdict} color={summary.verdict === 'PASS' ? '#10b981' : summary.verdict === 'REVIEW' ? '#f59e0b' : '#ef4444'} />
-            )}
-            <SummaryCard icon={<AlertTriangle size={20} />} label="CRITICAL CONTROLS" value={summary.by_severity?.CRITICAL || 0} color="#ef4444" />
-            <SummaryCard icon={<AlertTriangle size={20} />} label="HIGH CONTROLS" value={summary.by_severity?.HIGH || 0} color="#f97316" />
-            <SummaryCard icon={<AlertTriangle size={20} />} label="MEDIUM CONTROLS" value={summary.by_severity?.MEDIUM || 0} color="#f59e0b" />
-            <SummaryCard icon={<AlertTriangle size={20} />} label="LOW CONTROLS" value={summary.by_severity?.LOW || 0} color="#06b6d4" />
-            <SummaryCard icon={<BookOpen size={20} />} label="REGULATIONS" value={Object.keys(summary.by_regulation || {}).length} color="#8b5cf6" />
-            <SummaryCard icon={<Database size={20} />} label="CATEGORIES" value={Object.keys(summary.by_category || {}).length} color="#10b981" />
+            <BookOpen size={12} color="#6b7280" />
+            FDIC Compliance Control Analysis — {summary.total_controls} rules evaluated across your system
             {validationDone && (
-              <SummaryCard
-                icon={<CheckCircle2 size={20} />}
-                label="RAG VALIDATED"
-                value={`${validatedCount}/${validationResults.length}`}
-                color={validatedCount === validationResults.length ? '#10b981' : '#f59e0b'}
-              />
+              <span style={{
+                marginLeft: 'auto', padding: '2px 10px', borderRadius: 8, fontSize: 10,
+                background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.25)',
+                color: '#10b981', fontWeight: 700,
+              }}>
+                ✅ {validatedCount}/{validationResults.length} FDIC Rulebook Validated
+              </span>
             )}
           </div>
 
@@ -520,11 +671,11 @@ export function ControlLibrary({ pipelineStatus, selectedSystem }: ControlLibrar
           }}
         >
           {validating ? (
-            <><Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> Validating...</>
+            <><Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> Checking…</>
           ) : validationDone ? (
-            <><CheckCircle2 size={14} /> {validatedCount}/{validationResults.length} Validated</>
+            <><CheckCircle2 size={14} /> {validatedCount}/{validationResults.length} Checks Done</>
           ) : (
-            <><Database size={14} /> Validate Against RAG</>
+            <><Database size={14} /> Check Against FDIC Rulebook</>
           )}
         </motion.button>
 
@@ -861,11 +1012,11 @@ function RagControlsView({
         }}>
           <Radar size={28} color="#8b5cf6" />
         </div>
-        <div style={{ fontSize: 16, fontWeight: 700, color: '#e5e7eb' }}>RAG Regulatory Coverage</div>
-        <div style={{ fontSize: 12, color: '#6b7280', textAlign: 'center', maxWidth: 420, lineHeight: 1.6 }}>
+        <div style={{ fontSize: 16, fontWeight: 700, color: '#e5e7eb' }}>FDIC Regulatory Coverage</div>
+        <div style={{ fontSize: 12, color: '#6b7280', textAlign: 'center', maxWidth: 480, lineHeight: 1.6 }}>
           {pipelineCompleted
-            ? 'Compare your system\'s controls against additional regulatory sections discovered by the RAG knowledge base.'
-            : 'Run the analysis pipeline first, then load RAG coverage data here.'}
+            ? 'This view shows FDIC rulebook topics found by reading the actual regulation text — use it to discover if your system is missing coverage for certain chapters.'
+            : 'Run the analysis pipeline first, then load this view to see regulatory coverage gaps.'}
         </div>
         {pipelineCompleted && (
           <button
@@ -879,8 +1030,8 @@ function RagControlsView({
             }}
           >
             {loadingRag
-              ? <><Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> Loading...</>
-              : <><Radar size={14} /> Load RAG Comparison</>}
+              ? <><Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> Loading…</>
+              : <><Radar size={14} /> Load Regulatory Coverage</>}
           </button>
         )}
       </div>
@@ -904,23 +1055,61 @@ function RagControlsView({
 
   return (
     <>
+      {/* Plain English explanation */}
+      <div style={{
+        padding: '12px 16px', borderRadius: 10,
+        background: 'rgba(139,92,246,0.06)', border: '1px solid rgba(139,92,246,0.18)',
+        fontSize: 12, color: '#9ca3af', lineHeight: 1.7,
+      }}>
+        <span style={{ color: '#a78bfa', fontWeight: 700 }}>What is this section?</span>
+        {'  '}The FDIC publishes detailed rulebooks (12 CFR 330, 370, the IT Guide, etc.). After reading them,
+        our AI found regulation topics that may not yet be fully addressed in your system.
+        Think of it as:{' '}
+        <em style={{ color: '#d1d5db' }}>"Here are chapters in the FDIC rulebook your system should review."</em>
+        {'  '}Each item below is a section the AI flagged as potentially relevant to your setup.
+      </div>
+
+      {/* Compact summary line */}
+      <div style={{
+        display: 'flex', gap: 12, flexWrap: 'wrap',
+        padding: '10px 16px', borderRadius: 10,
+        background: '#111827', border: '1px solid #2a3350',
+        fontSize: 12, alignItems: 'center',
+      }}>
+        <Radar size={14} color="#8b5cf6" />
+        <span style={{ color: '#9ca3af' }}>
+          <span style={{ color: '#a78bfa', fontWeight: 700 }}>{ragComparison.rag_only_count}</span> regulation topics found
+        </span>
+        {ragComparison.semantic_coverage_pct !== undefined && (
+          <>
+            <div style={{ width: 1, height: 16, background: '#2a3350' }} />
+            <span style={{ color: '#9ca3af' }}>
+              <span style={{ color: '#10b981', fontWeight: 700 }}>{ragComparison.semantic_coverage_pct}%</span> overlap with your current controls
+            </span>
+          </>
+        )}
+        {(['CRITICAL','HIGH','MEDIUM','LOW'] as const)
+          .filter(k => (ragComparison.rag_only_by_severity?.[k] || 0) > 0)
+          .map(k => {
+            const c = k === 'CRITICAL' ? '#ef4444' : k === 'HIGH' ? '#f97316' : k === 'MEDIUM' ? '#f59e0b' : '#06b6d4';
+            return (
+              <span key={k} style={{
+                padding: '2px 8px', borderRadius: 8, fontSize: 11, fontWeight: 700,
+                background: `${c}15`, border: `1px solid ${c}30`, color: c,
+              }}>
+                {ragComparison.rag_only_by_severity?.[k]} {k}
+              </span>
+            );
+          })}
+      </div>
+
       {/* Section Header */}
       <div style={{
         fontSize: 11, fontWeight: 700, color: '#6b7280', letterSpacing: 1.5,
         textTransform: 'uppercase', paddingBottom: 4,
         borderBottom: '1px solid #2a335050',
       }}>
-        RAG Controls — Additional Regulatory Sections from RAG Analysis
-      </div>
-
-      {/* RAG Summary Cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10 }}>
-        <SummaryCard icon={<Radar size={20} />} label="RAG SECTIONS" value={ragComparison.rag_only_count} color="#8b5cf6" />
-        <SummaryCard icon={<AlertTriangle size={20} />} label="CRITICAL" value={ragComparison.rag_only_by_severity?.CRITICAL || 0} color="#ef4444" />
-        <SummaryCard icon={<AlertTriangle size={20} />} label="HIGH" value={ragComparison.rag_only_by_severity?.HIGH || 0} color="#f97316" />
-        <SummaryCard icon={<AlertTriangle size={20} />} label="MEDIUM" value={ragComparison.rag_only_by_severity?.MEDIUM || 0} color="#f59e0b" />
-        <SummaryCard icon={<AlertTriangle size={20} />} label="LOW" value={ragComparison.rag_only_by_severity?.LOW || 0} color="#06b6d4" />
-        <SummaryCard icon={<CheckCircle2 size={20} />} label="RAG COVERAGE" value={`${ragComparison.semantic_coverage_pct}%`} color="#10b981" />
+        Regulation topics not yet fully addressed — {filtered.length} sections
       </div>
 
       {/* RAG Coverage Bar */}
@@ -928,7 +1117,7 @@ function RagControlsView({
         background: '#111827', borderRadius: 12, border: '1px solid #2a3350', padding: 16,
       }}>
         <div style={{ fontSize: 12, fontWeight: 600, color: '#9ca3af', marginBottom: 10, textTransform: 'uppercase', letterSpacing: 1 }}>
-          RAG Severity Breakdown — {ragComparison.rag_only_count} Additional Sections
+          Risk level split — {ragComparison.rag_only_count} topics
         </div>
         <div style={{ display: 'flex', gap: 0, borderRadius: 6, overflow: 'hidden', height: 10, marginBottom: 10 }}>
           {[

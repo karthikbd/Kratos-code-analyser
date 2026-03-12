@@ -69,10 +69,10 @@ export default function App() {
   const totalFindings = state.summary?.total ?? state.findings.length;
 
   const TAB_ITEMS: { id: Tab; label: string; icon: typeof Shield }[] = [
-    { id: 'controls', label: 'FDIC Control Library', icon: BookOpen },
-    { id: 'pipeline', label: 'Agent Pipeline Flow', icon: GitBranch },
+    { id: 'controls', label: 'Compliance Report', icon: BookOpen },
+    { id: 'pipeline', label: 'Analysis Pipeline', icon: GitBranch },
     { id: 'lineage', label: 'Data Lineage', icon: Share2 },
-    { id: 'details', label: 'Agent Details', icon: Layers },
+    { id: 'details', label: 'Detailed Findings', icon: Layers },
     { id: 'events', label: 'Live Events', icon: Zap },
   ];
 
@@ -287,7 +287,7 @@ export default function App() {
 
         {/* Tab Content */}
         {activeTab === 'controls' && (
-          <ControlLibrary pipelineStatus={state.status} selectedSystem={selectedSystem} />
+          <ControlLibrary pipelineStatus={state.status} selectedSystem={selectedSystem} agents={state.agents} />
         )}
 
         {activeTab === 'pipeline' && (
