@@ -52,7 +52,6 @@ export function ControlLibrary({ pipelineStatus, selectedSystem, agents = [] }: 
   const [expandedControl, setExpandedControl] = useState<string | null>(null);
   const [ragComparison, setRagComparison] = useState<RagComparisonData | null>(null);
   const [dataLoaded, setDataLoaded] = useState(false);
-  const [controlView, setControlView] = useState<'system' | 'rag'>('system');
   const [expandedRagSection, setExpandedRagSection] = useState<string | null>(null);
   const [ragSearchTerm, setRagSearchTerm] = useState('');
   const [ragFilterSeverity, setRagFilterSeverity] = useState<string>('all');
@@ -113,7 +112,6 @@ export function ControlLibrary({ pipelineStatus, selectedSystem, agents = [] }: 
     setRagComparison(null);
     setValidationResults([]);
     setValidationDone(false);
-    setControlView('system');
   }, [selectedSystem]);
 
   // Also reset data whenever a new pipeline run starts so the fetched controls
@@ -143,7 +141,6 @@ export function ControlLibrary({ pipelineStatus, selectedSystem, agents = [] }: 
         const ragRes = await fetch(`${API_BASE}/api/controls/rag-comparison?system_id=${encodeURIComponent(selectedSystem)}`);
         const ragData = await ragRes.json();
         setRagComparison(ragData);
-        setControlView('rag');
       } catch (ragErr) {
         console.error('Auto RAG comparison load failed:', ragErr);
       } finally {
@@ -419,84 +416,53 @@ export function ControlLibrary({ pipelineStatus, selectedSystem, agents = [] }: 
         </div>
       )}
 
-      {/* ═══ FDIC CHECKLIST MODE — Disclaimer + 90-rule static checklist ═══ */}
-      {/* Sub-Tab Switcher: Control Analysis / Regulatory Coverage */}
+      {/* ═══ ACTION BAR — Validate + Download ═══ */}
       <div style={{ display: 'flex', gap: 0, background: '#111827', borderRadius: 12, border: '1px solid #2a3350', padding: 4 }}>
-        <button
-          onClick={() => setControlView('system')}
+        <motion.button
+          whileHover={{ scale: 1.03 }}
+          whileTap={{ scale: 0.97 }}
+          onClick={validateAgainstRag}
+          disabled={validating}
           style={{
-            flex: 1, padding: '10px 16px', borderRadius: 8, border: 'none',
-            background: controlView === 'system' ? 'linear-gradient(135deg, #3b82f620, #8b5cf620)' : 'transparent',
-            color: controlView === 'system' ? '#e5e7eb' : '#6b7280',
-            fontSize: 13, fontWeight: 700, cursor: 'pointer',
+            flex: 1, padding: '10px 16px', borderRadius: 8,
+            background: validationDone
+              ? 'linear-gradient(135deg, #10b981, #059669)'
+              : 'linear-gradient(135deg, #8b5cf6, #6366f1)',
+            border: 'none', color: 'white', fontSize: 13, fontWeight: 700,
+            cursor: validating ? 'not-allowed' : 'pointer',
             display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-            transition: 'all 0.2s',
-            borderBottom: controlView === 'system' ? '2px solid #3b82f6' : '2px solid transparent',
+            opacity: validating ? 0.7 : 1, transition: 'all 0.2s',
           }}
         >
-          <Shield size={16} color={controlView === 'system' ? '#3b82f6' : '#6b7280'} />
-          Control Analysis
-          {summary && (
-            <span style={{
-              padding: '2px 8px', borderRadius: 10, fontSize: 11, fontWeight: 700,
-              background: controlView === 'system' ? '#3b82f620' : '#1e2538',
-              color: controlView === 'system' ? '#3b82f6' : '#6b7280',
-            }}>
-              {summary.total_controls}
-            </span>
+          {validating ? (
+            <><Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> Checking…</>
+          ) : validationDone ? (
+            <><CheckCircle2 size={14} /> {validatedCount}/{validationResults.length} Rulebook Checks Done</>
+          ) : (
+            <><Database size={14} /> Check Against FDIC Rulebook</>
           )}
-        </button>
-        {validationDone ? (
-          <button
-            onClick={() => setControlView('rag')}
+        </motion.button>
+        {pipelineStatus === 'completed' && (
+          <motion.button
+            whileHover={{ scale: 1.03 }}
+            whileTap={{ scale: 0.97 }}
+            onClick={downloadReport}
             style={{
-              flex: 1, padding: '10px 16px', borderRadius: 8, border: 'none',
-              background: controlView === 'rag' ? 'linear-gradient(135deg, #8b5cf620, #06b6d420)' : 'transparent',
-              color: controlView === 'rag' ? '#e5e7eb' : '#6b7280',
-              fontSize: 13, fontWeight: 700, cursor: 'pointer',
-              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-              transition: 'all 0.2s',
-              borderBottom: controlView === 'rag' ? '2px solid #8b5cf6' : '2px solid transparent',
+              padding: '10px 20px', borderRadius: 8, marginLeft: 4,
+              background: 'linear-gradient(135deg, #0ea5e9, #0284c7)',
+              border: 'none', color: 'white', fontSize: 13, fontWeight: 700,
+              cursor: 'pointer',
+              display: 'flex', alignItems: 'center', gap: 8,
             }}
           >
-            <Radar size={16} color={controlView === 'rag' ? '#8b5cf6' : '#6b7280'} />
-            Regulatory Coverage
-            {ragComparison && (
-              <span style={{
-                padding: '2px 8px', borderRadius: 10, fontSize: 11, fontWeight: 700,
-                background: controlView === 'rag' ? '#8b5cf620' : '#1e2538',
-                color: controlView === 'rag' ? '#8b5cf6' : '#6b7280',
-              }}>
-                {ragComparison.rag_only_count}
-              </span>
-            )}
-          </button>
-        ) : (
-          <div
-            title="Click 'Check Against FDIC Rulebook' in the Control Analysis tab to unlock this view"
-            style={{
-              flex: 1, padding: '10px 16px', borderRadius: 8,
-              background: 'transparent', color: '#374151',
-              fontSize: 13, fontWeight: 700,
-              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-              borderBottom: '2px solid transparent',
-              cursor: 'not-allowed', userSelect: 'none',
-            }}
-          >
-            <Lock size={14} color="#374151" />
-            Regulatory Coverage
-            <span style={{
-              padding: '2px 8px', borderRadius: 10, fontSize: 10, fontWeight: 600,
-              background: '#1e2538', color: '#4b5563',
-            }}>locked</span>
-          </div>
+            <Download size={14} /> Download Report
+          </motion.button>
         )}
       </div>
 
-      {/* ═══ CONTROL ANALYSIS TAB ═══ */}
-      {controlView === 'system' && (<>
-      {/* Summary — simplified scorecard replacing the 9 cards */}
-      {summary && (
+      {/* ═══ REGULATORY COVERAGE (RAG) ═══ */}
+      {/* Inline severity breakdown — only after RAG validation */}
+      {validationDone && summary && (
         <>
           {/* One-line context header */}
           <div style={{
@@ -518,28 +484,8 @@ export function ControlLibrary({ pipelineStatus, selectedSystem, agents = [] }: 
             )}
           </div>
 
-          {/* Detected System Capabilities */}
-          {summary.capabilities && (summary.capabilities.orc_types?.length > 0 || summary.capabilities.features?.length > 0) && (
-            <div style={{ background: '#111827', borderRadius: 12, border: '1px solid #2a3350', padding: 14 }}>
-              <div style={{ fontSize: 12, fontWeight: 600, color: '#9ca3af', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 1 }}>
-                Detected System Capabilities
-              </div>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                {(summary.capabilities.orc_types || []).map((orc: string) => (
-                  <span key={orc} style={{
-                    padding: '3px 10px', borderRadius: 6, fontSize: 11, fontWeight: 600,
-                    background: 'rgba(59,130,246,0.12)', border: '1px solid rgba(59,130,246,0.25)', color: '#60a5fa',
-                  }}>ORC: {orc}</span>
-                ))}
-                {(summary.capabilities.features || []).map((feat: string) => (
-                  <span key={feat} style={{
-                    padding: '3px 10px', borderRadius: 6, fontSize: 11, fontWeight: 600,
-                    background: 'rgba(139,92,246,0.12)', border: '1px solid rgba(139,92,246,0.25)', color: '#a78bfa',
-                  }}>{feat.replace(/_/g, ' ')}</span>
-                ))}
-              </div>
-            </div>
-          )}
+          {/* no-op placeholder to preserve structure */}
+          <>{}</>
 
           {/* Severity Pass/Fail Breakdown Table */}
           <div style={{
@@ -614,135 +560,9 @@ export function ControlLibrary({ pipelineStatus, selectedSystem, agents = [] }: 
         </>
       )}
 
-      {/* Regulation Breakdown Bar */}
-      {summary && (
-        <div style={{
-          background: '#111827', borderRadius: 12, border: '1px solid #2a3350', padding: 16,
-        }}>
-          <div style={{ fontSize: 12, fontWeight: 600, color: '#9ca3af', marginBottom: 10, textTransform: 'uppercase', letterSpacing: 1 }}>
-            Controls by Regulation
-          </div>
-          <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
-            {Object.entries(summary.by_regulation || {}).map(([reg, count]) => (
-              <div key={reg} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <div style={{ width: 12, height: 12, borderRadius: 3, background: reg.includes('370') ? '#3b82f6' : reg.includes('330') ? '#8b5cf6' : reg.includes('IT') ? '#10b981' : '#6b7280' }} />
-                <span style={{ fontSize: 12, color: '#e5e7eb' }}>{reg}</span>
-                <span style={{ fontSize: 13, fontWeight: 700, color: '#e5e7eb' }}>{count}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
 
-      {/* Search / Filter / Validate Controls */}
-      <div style={{
-        display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center',
-        padding: 12, background: '#111827', borderRadius: 12, border: '1px solid #2a3350',
-      }}>
-        <div style={{ position: 'relative', flex: 1, minWidth: 200 }}>
-          <Search size={14} style={{ position: 'absolute', left: 10, top: 10, color: '#6b7280' }} />
-          <input
-            value={searchTerm}
-            onChange={e => setSearchTerm(e.target.value)}
-            placeholder="Search controls by ID, title, description..."
-            style={{
-              width: '100%', padding: '8px 12px 8px 32px', borderRadius: 8,
-              background: '#1e2538', border: '1px solid #2a3350', color: '#e5e7eb',
-              fontSize: 12, outline: 'none',
-            }}
-          />
-        </div>
-
-        <FilterSelect
-          value={filterCategory}
-          onChange={setFilterCategory}
-          options={[{ value: 'all', label: 'All Categories' }, ...categories.map(c => ({ value: c, label: c }))]}
-        />
-        <FilterSelect
-          value={filterRegulation}
-          onChange={setFilterRegulation}
-          options={[{ value: 'all', label: 'All Regulations' }, ...regulations.map(r => ({ value: r, label: r }))]}
-        />
-        <FilterSelect
-          value={String(filterLayer)}
-          onChange={v => setFilterLayer(Number(v))}
-          options={[{ value: '0', label: 'All Layers' }, ...([1,2,3,4,5,6,7].map(l => ({ value: String(l), label: `Layer ${l}` })))]}
-        />
-
-        <motion.button
-          whileHover={{ scale: 1.03 }}
-          whileTap={{ scale: 0.97 }}
-          onClick={validateAgainstRag}
-          disabled={validating}
-          style={{
-            padding: '8px 16px', borderRadius: 8,
-            background: validationDone
-              ? 'linear-gradient(135deg, #10b981, #059669)'
-              : 'linear-gradient(135deg, #8b5cf6, #6366f1)',
-            border: 'none', color: 'white', fontSize: 12, fontWeight: 700,
-            cursor: validating ? 'not-allowed' : 'pointer',
-            display: 'flex', alignItems: 'center', gap: 6,
-            opacity: validating ? 0.7 : 1,
-          }}
-        >
-          {validating ? (
-            <><Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> Checking…</>
-          ) : validationDone ? (
-            <><CheckCircle2 size={14} /> {validatedCount}/{validationResults.length} Checks Done</>
-          ) : (
-            <><Database size={14} /> Check Against FDIC Rulebook</>
-          )}
-        </motion.button>
-
-        {/* Download Report button — active once pipeline has run */}
-        {pipelineStatus === 'completed' && (
-          <motion.button
-            whileHover={{ scale: 1.03 }}
-            whileTap={{ scale: 0.97 }}
-            onClick={downloadReport}
-            style={{
-              padding: '8px 16px', borderRadius: 8,
-              background: 'linear-gradient(135deg, #0ea5e9, #0284c7)',
-              border: 'none', color: 'white', fontSize: 12, fontWeight: 700,
-              cursor: 'pointer',
-              display: 'flex', alignItems: 'center', gap: 6,
-            }}
-          >
-            <Download size={14} /> Download Report
-          </motion.button>
-        )}
-      </div>
-
-      {/* Results count */}
-      <div style={{ fontSize: 12, color: '#6b7280' }}>
-        Showing {filtered.length} of {summary ? summary.total_controls : controls.length} controls
-      </div>
-
-      {/* Control List */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-        <AnimatePresence>
-          {filtered.map((ctrl, i) => {
-            const ragResult = validationResults.find(r => r.control_id === ctrl.control_id);
-            return (
-              <ControlRow
-                key={ctrl.control_id}
-                control={ctrl}
-                ragResult={ragResult}
-                index={i}
-                expanded={expandedControl === ctrl.control_id}
-                onToggle={() => setExpandedControl(
-                  expandedControl === ctrl.control_id ? null : ctrl.control_id
-                )}
-              />
-            );
-          })}
-        </AnimatePresence>
-      </div>
-      </>)}
-
-      {/* ═══ RAG CONTROLS TAB ═══ */}
-      {controlView === 'rag' && (
-        <RagControlsView
+      {/* ═══ RAG CONTROLS VIEW ═══ */}
+      <RagControlsView
           ragComparison={ragComparison}
           expandedSection={expandedRagSection}
           onToggleSection={(s) => setExpandedRagSection(expandedRagSection === s ? null : s)}
@@ -756,7 +576,6 @@ export function ControlLibrary({ pipelineStatus, selectedSystem, agents = [] }: 
           loadingRag={loadingRag}
           pipelineCompleted={pipelineStatus === 'completed'}
         />
-      )}
     </div>
   );
 }
