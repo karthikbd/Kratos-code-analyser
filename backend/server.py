@@ -198,6 +198,17 @@ _system_results: dict[str, dict[str, Any]] = {}
 # Agent definitions
 AGENT_DEFINITIONS = [
     {
+        "id": "layer0",
+        "name": "Source Code Evidence Extractor",
+        "layer": 0,
+        "description": "Extracts compliance values directly from source code and compares against FDIC regulatory requirements",
+        "regulation": "12 CFR 330 / 360.8 / 370 / IT Guide v3.0",
+        "status": "idle",
+        "findings": [],
+        "finding_counts": {"CRITICAL": 0, "HIGH": 0, "MEDIUM": 0, "LOW": 0, "INFO": 0},
+        "duration_ms": 0,
+    },
+    {
         "id": "layer1",
         "name": "ORC Static Analyzer",
         "layer": 1,
@@ -424,44 +435,59 @@ async def run_pipeline(
                 "error": str(e),
             })
 
+    # ── Layer 0: Source Code Evidence Extraction (runs only when real sources exist) ──
+    if system_sources:
+        from backend.layers.layer0_evidence_extractor import Layer0EvidenceExtractor
+        await _run_layer(
+            run_id, agents, 0, "layer0",
+            lambda: Layer0EvidenceExtractor().scan(system_sources),
+            system_sources=None,  # Layer 0 handles its own file access
+        )
+    else:
+        # Mark Layer 0 as skipped when no real system is selected
+        agents[0]["status"] = "skipped"
+        agents[0]["findings"] = []
+        await broadcast({"type": "agent_skipped", "run_id": run_id,
+                         "agent_id": "layer0", "reason": "No operational system selected"})
+
     # ── Layer 1: ORC Static Analysis ──────────────────────────────────────
     await _run_layer(
-        run_id, agents, 0, "layer1",
+        run_id, agents, 1, "layer1",
         lambda: _execute_layer1(orc_code, pending_code),
         system_sources=system_sources,
     )
 
     # ── Layer 2: Data Completeness ────────────────────────────────────────
     await _run_layer(
-        run_id, agents, 1, "layer2",
+        run_id, agents, 2, "layer2",
         lambda: _execute_layer2(accounts, customers, participants),
         system_sources=system_sources,
     )
 
     # ── Layer 3: Calculation Engine ───────────────────────────────────────
     await _run_layer(
-        run_id, agents, 2, "layer3",
+        run_id, agents, 3, "layer3",
         lambda: _execute_layer3(accounts, calc_code),
         system_sources=system_sources,
     )
 
     # ── Layer 4: Output Pipeline ──────────────────────────────────────────
     await _run_layer(
-        run_id, agents, 3, "layer4",
+        run_id, agents, 4, "layer4",
         lambda: _execute_layer4(accounts, customers, participants, are_files, output_code),
         system_sources=system_sources,
     )
 
     # ── Layer 5: Behavioral ───────────────────────────────────────────────
     await _run_layer(
-        run_id, agents, 4, "layer5",
+        run_id, agents, 5, "layer5",
         lambda: _execute_layer5(accounts),
         system_sources=system_sources,
     )
 
     # ── Layer 6: Certification ────────────────────────────────────────────
     await _run_layer(
-        run_id, agents, 5, "layer6",
+        run_id, agents, 6, "layer6",
         lambda: _execute_layer6(accounts, customers, institution_name),
         system_sources=system_sources,
     )
@@ -469,7 +495,7 @@ async def run_pipeline(
     # ── Layer 7: Data Lineage ─────────────────────────────────────────────
     source_file_names = list(system_sources.keys()) if system_sources else []
     await _run_layer(
-        run_id, agents, 6, "layer7",
+        run_id, agents, 7, "layer7",
         lambda: _execute_layer7(accounts, lineage_code, source_file_names),
         system_sources=system_sources,
     )

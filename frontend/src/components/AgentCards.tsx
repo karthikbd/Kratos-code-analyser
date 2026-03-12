@@ -19,6 +19,7 @@ const STATUS_CONFIG: Record<string, { color: string; icon: typeof Shield; label:
   running: { color: '#3b82f6', icon: Loader2, label: 'Analyzing...' },
   completed: { color: '#10b981', icon: CheckCircle, label: 'Complete' },
   failed: { color: '#ef4444', icon: XCircle, label: 'Failed' },
+  skipped: { color: '#6b7280', icon: Shield, label: 'Skipped' },
 };
 
 interface Props {
@@ -84,7 +85,7 @@ function AgentCard({ agent, index, controlSections }: { agent: AgentDef; index: 
             </div>
             <div>
               <div style={{ fontSize: 11, color: '#9ca3af', fontWeight: 600, letterSpacing: 1, textTransform: 'uppercase' }}>
-                Layer {agent.layer}
+                Layer {agent.layer === 0 ? '0 — Evidence' : agent.layer}
               </div>
               <div style={{ fontSize: 16, fontWeight: 700, color: '#e5e7eb' }}>
                 {agent.name}
@@ -237,6 +238,39 @@ function FindingRow({ finding, index, controlSections }: { finding: Finding; ind
           <div style={{ fontSize: 12, color: '#d1d5db', lineHeight: 1.5 }}>
             {finding.description}
           </div>
+          {/* Layer 0 Evidence Comparison — code value vs required FDIC value */}
+          {finding.evidence?.code_value !== undefined && finding.evidence?.required_value !== undefined && (
+            <div style={{
+              marginTop: 6, borderRadius: 6, overflow: 'hidden',
+              border: '1px solid #2a3350', fontSize: 11,
+            }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 0 }}>
+                <div style={{ padding: '5px 8px', background: 'rgba(239,68,68,0.07)', borderRight: '1px solid #2a3350' }}>
+                  <div style={{ color: '#6b7280', fontWeight: 700, marginBottom: 2, fontSize: 9, letterSpacing: 1 }}>FOUND IN CODE</div>
+                  <div style={{ color: '#fca5a5', fontFamily: 'monospace', fontWeight: 700 }}>
+                    {finding.evidence.code_value === 'None' ? '(not found)' : finding.evidence.code_value}
+                  </div>
+                  {finding.evidence.code_file && finding.evidence.code_file !== '(not found)' && (
+                    <div style={{ color: '#6b7280', fontSize: 9, marginTop: 1 }}>
+                      {finding.evidence.code_file}
+                      {finding.evidence.code_line && finding.evidence.code_line !== '0' ? ` :${finding.evidence.code_line}` : ''}
+                    </div>
+                  )}
+                </div>
+                <div style={{ padding: '5px 8px', background: 'rgba(16,185,129,0.07)' }}>
+                  <div style={{ color: '#6b7280', fontWeight: 700, marginBottom: 2, fontSize: 9, letterSpacing: 1 }}>FDIC REQUIRES</div>
+                  <div style={{ color: '#6ee7b7', fontFamily: 'monospace', fontWeight: 700 }}>
+                    {finding.evidence.required_value}
+                  </div>
+                </div>
+              </div>
+              {finding.evidence.gap && (
+                <div style={{ padding: '4px 8px', background: 'rgba(245,158,11,0.06)', borderTop: '1px solid #2a3350', color: '#fbbf24', fontSize: 10, lineHeight: 1.4 }}>
+                  {finding.evidence.gap}
+                </div>
+              )}
+            </div>
+          )}
           {/* Code Snippet */}
           {finding.code_snippet && (
             <pre style={{

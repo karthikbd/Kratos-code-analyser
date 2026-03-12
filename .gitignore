@@ -78,5 +78,6 @@ htmlcov/
 .mypy_cache/
 .ruff_cache/
 
-# ── Codacy AI instructions (local tooling only) ───────────────────────────────
+# ── Codacy local tooling (not needed in repo) ────────────────────────────────
+.codacy/
 .github/instructions/codacy.instructions.md

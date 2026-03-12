@@ -1,6 +1,6 @@
 /** WebSocket event types streamed from FastAPI backend */
 
-export type AgentStatus = 'idle' | 'running' | 'completed' | 'failed';
+export type AgentStatus = 'idle' | 'running' | 'completed' | 'failed' | 'skipped';
 
 export interface AgentDef {
   id: string;
