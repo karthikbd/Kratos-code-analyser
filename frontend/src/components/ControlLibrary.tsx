@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   Shield, CheckCircle2, XCircle, Search,
   ChevronDown, ChevronRight, Database, Loader2, BookOpen,
-  Filter, FileCode2, Radar, Lock, Download, ClipboardList,
+  Filter, FileCode2, Radar, Lock, Download,
 } from 'lucide-react';
 import type { FDICControl, ControlSummary, ControlValidationResult, RagControl, RagComparisonData, AgentDef } from '../types';
 
@@ -36,14 +36,9 @@ interface ControlLibraryProps {
   selectedSystem: string;
   /** Layer 0 agent output — used to show "what we found in code vs FDIC requirement" table */
   agents?: AgentDef[];
-  /**
-   * 'evidence' (default) — Compliance Report tab: shows Layer 0 code evidence only.
-   * 'checklist' — FDIC Checklist tab: shows the 90-rule static regulatory checklist with a disclaimer.
-   */
-  mode?: 'evidence' | 'checklist';
 }
 
-export function ControlLibrary({ pipelineStatus, selectedSystem, agents = [], mode = 'evidence' }: ControlLibraryProps) {
+export function ControlLibrary({ pipelineStatus, selectedSystem, agents = [] }: ControlLibraryProps) {
   const [controls, setControls] = useState<FDICControl[]>([]);
   const [summary, setSummary] = useState<ControlSummary | null>(null);
   const [validationResults, setValidationResults] = useState<ControlValidationResult[]>([]);
@@ -200,14 +195,10 @@ export function ControlLibrary({ pipelineStatus, selectedSystem, agents = [], mo
         }}>
           <BookOpen size={32} color="#3b82f6" />
         </div>
-        <div style={{ fontSize: 18, fontWeight: 700, color: '#e5e7eb' }}>
-          {mode === 'checklist' ? 'FDIC Regulatory Checklist' : 'Compliance Report'}
-        </div>
+        <div style={{ fontSize: 18, fontWeight: 700, color: '#e5e7eb' }}>Compliance Report</div>
         <div style={{ fontSize: 13, color: '#6b7280', textAlign: 'center', maxWidth: 420, lineHeight: 1.6 }}>
-          {mode === 'checklist'
-            ? 'Run the AI analysis to load the 90-rule FDIC regulatory checklist. Each control will show pass/fail inferred from agent findings.'
-            : 'Run the AI analysis to check your system\'s code against FDIC compliance rules. Results will appear here with a breakdown of what passed and what needs attention.'
-          }
+          Run the AI analysis to check your system's code against FDIC compliance rules.
+          Results will appear here with a breakdown of what passed and what needs attention.
         </div>
         <div style={{
           display: 'flex', alignItems: 'center', gap: 8,
@@ -261,7 +252,7 @@ export function ControlLibrary({ pipelineStatus, selectedSystem, agents = [], mo
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
 
       {/* ═══ LAYER 0 EVIDENCE BOX — What we found in code vs FDIC requirement ═══ */}
-      {mode === 'evidence' && layer0Agent && layer0Agent.status !== 'skipped' && layer0Findings.length > 0 && (
+      {layer0Agent && layer0Agent.status !== 'skipped' && layer0Findings.length > 0 && (
         <div style={{
           background: 'linear-gradient(135deg, #0a0f1e, #111827)',
           borderRadius: 14, border: '2px solid #2a3350',
@@ -403,7 +394,7 @@ export function ControlLibrary({ pipelineStatus, selectedSystem, agents = [], mo
       )}
 
       {/* ── Placeholder if layer0 ran but produced no evidence ─────────── */}
-      {mode === 'evidence' && layer0Agent && layer0Agent.status === 'completed' && layer0Findings.length === 0 && (
+      {layer0Agent && layer0Agent.status === 'completed' && layer0Findings.length === 0 && (
         <div style={{
           padding: '14px 20px', borderRadius: 12,
           background: 'rgba(107,114,128,0.07)', border: '1px solid #2a3350',
@@ -415,31 +406,8 @@ export function ControlLibrary({ pipelineStatus, selectedSystem, agents = [], mo
       )}
 
       {/* ═══ FDIC CHECKLIST MODE — Disclaimer + 90-rule static checklist ═══ */}
-      {mode === 'checklist' && (
-        <div style={{
-          padding: '14px 20px',
-          background: 'linear-gradient(135deg, rgba(139,92,246,0.08), rgba(59,130,246,0.05))',
-          borderRadius: 12, border: '1px solid rgba(139,92,246,0.3)',
-          display: 'flex', alignItems: 'flex-start', gap: 12,
-        }}>
-          <ClipboardList size={18} color="#a78bfa" style={{ marginTop: 2, flexShrink: 0 }} />
-          <div>
-            <div style={{ fontSize: 13, fontWeight: 700, color: '#c4b5fd', marginBottom: 4 }}>
-              Pre-Defined FDIC Regulatory Checklist — 90 Rules
-            </div>
-            <div style={{ fontSize: 12, color: '#9ca3af', lineHeight: 1.6 }}>
-              These controls are a <strong style={{ color: '#e5e7eb' }}>static pre-defined catalogue</strong> drawn from
-              FDIC Part 370, 12 CFR Part 330, and the FDIC IT Guide v3.0. Pass/fail is{' '}
-              <em>inferred</em> by matching agent findings to regulation section numbers — it is
-              not measured directly from your code. For evidence-based results extracted from your
-              source files, see the <strong style={{ color: '#60a5fa' }}>Compliance Report</strong> tab.
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Sub-Tab Switcher: Control Analysis / Regulatory Coverage — checklist mode only */}
-      {mode === 'checklist' && <div style={{ display: 'flex', gap: 0, background: '#111827', borderRadius: 12, border: '1px solid #2a3350', padding: 4 }}>
+      {/* Sub-Tab Switcher: Control Analysis / Regulatory Coverage */}
+      <div style={{ display: 'flex', gap: 0, background: '#111827', borderRadius: 12, border: '1px solid #2a3350', padding: 4 }}>
         <button
           onClick={() => setControlView('system')}
           style={{
@@ -509,10 +477,10 @@ export function ControlLibrary({ pipelineStatus, selectedSystem, agents = [], mo
             }}>locked</span>
           </div>
         )}
-      </div>}
+      </div>
 
       {/* ═══ CONTROL ANALYSIS TAB ═══ */}
-      {mode === 'checklist' && controlView === 'system' && (<>
+      {controlView === 'system' && (<>
       {/* Summary — simplified scorecard replacing the 9 cards */}
       {summary && (
         <>
@@ -759,7 +727,7 @@ export function ControlLibrary({ pipelineStatus, selectedSystem, agents = [], mo
       </>)}
 
       {/* ═══ RAG CONTROLS TAB ═══ */}
-      {mode === 'checklist' && controlView === 'rag' && (
+      {controlView === 'rag' && (
         <RagControlsView
           ragComparison={ragComparison}
           expandedSection={expandedRagSection}
