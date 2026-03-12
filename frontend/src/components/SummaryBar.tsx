@@ -1,5 +1,5 @@
 import { motion, AnimatePresence } from 'framer-motion';
-import { CheckCircle2, AlertTriangle, XCircle, Wifi, WifiOff, Database, Activity } from 'lucide-react';
+import { CheckCircle2, Wifi, WifiOff, Database, Activity } from 'lucide-react';
 import type { PipelineSummary } from '../types';
 
 interface Props {
@@ -102,7 +102,7 @@ export function SummaryBar({ summary, status, ragStatus, ragChunks, totalFinding
         )}
       </div>
 
-      {/* ── Findings summary — only after analysis completes ─────────── */}
+      {/* ── Post-scan guidance — only after analysis completes ──────── */}
       <AnimatePresence>
         {summary && isDone && (
           <motion.div
@@ -112,54 +112,17 @@ export function SummaryBar({ summary, status, ragStatus, ragChunks, totalFinding
             style={{
               background: 'linear-gradient(135deg, #0f1628, #111827)',
               borderRadius: 12, border: '1px solid #2a3350',
-              overflow: 'hidden',
+              padding: '10px 20px',
+              display: 'flex', alignItems: 'center', gap: 10,
             }}
           >
-            {/* Plain-language headline based on actual code findings */}
-            <div style={{
-              padding: '12px 20px 6px',
-              display: 'flex', alignItems: 'center', gap: 10,
-            }}>
-              {summary.total === 0
-                ? <CheckCircle2 size={15} color="#10b981" />
-                : <AlertTriangle size={15} color="#f59e0b" />}
-              <span style={{ fontSize: 13, fontWeight: 700, color: '#e5e7eb' }}>
-                {summary.total === 0
-                  ? <span>Code scan detected <span style={{ color: '#10b981' }}>no compliance issues</span> in your system.</span>
-                  : <>
-                      Code scan found{' '}
-                      <span style={{ color: '#f59e0b' }}>{summary.total} compliance issue{summary.total !== 1 ? 's' : ''}</span>
-                      {' '}in your system — see the{' '}
-                      <span style={{ color: '#60a5fa' }}>Compliance Report</span> tab for evidence details,
-                      and the <span style={{ color: '#8b5cf6' }}>FDIC Checklist</span> tab for regulatory coverage.
-                    </>
-                }
-              </span>
-            </div>
-
-            {/* Severity pills — based on actual agent findings */}
-            {summary.total > 0 && (
-              <div style={{ padding: '4px 20px 12px' }}>
-                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                  {[
-                    { label: 'Critical', val: summary.critical, color: '#ef4444', Icon: XCircle },
-                    { label: 'High',     val: summary.high,     color: '#f97316', Icon: AlertTriangle },
-                    { label: 'Medium',   val: summary.medium,   color: '#f59e0b', Icon: AlertTriangle },
-                    { label: 'Low',      val: summary.low,      color: '#06b6d4', Icon: AlertTriangle },
-                  ].filter(s => s.val > 0).map(({ label, val, color, Icon }) => (
-                    <span key={label} style={{
-                      padding: '2px 10px', borderRadius: 10, fontSize: 11,
-                      background: `${color}15`, border: `1px solid ${color}30`,
-                      color, fontWeight: 600,
-                      display: 'flex', alignItems: 'center', gap: 4,
-                    }}>
-                      <Icon size={11} />
-                      {val} {label}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            )}
+            <CheckCircle2 size={14} color="#10b981" />
+            <span style={{ fontSize: 12, color: '#9ca3af' }}>
+              Pipeline analysis complete. Open the{' '}
+              <strong style={{ color: '#e5e7eb' }}>Compliance Report</strong> tab, then click{' '}
+              <strong style={{ color: '#8b5cf6' }}>Check Against FDIC Rulebook</strong>{' '}
+              to compare extracted code values against FDIC-required thresholds from the regulatory documents.
+            </span>
           </motion.div>
         )}
       </AnimatePresence>

@@ -267,32 +267,42 @@ export function ControlLibrary({ pipelineStatus, selectedSystem, agents = [] }: 
             <FileCode2 size={18} color="#3b82f6" />
             <div style={{ flex: 1 }}>
               <div style={{ fontSize: 14, fontWeight: 800, color: '#e5e7eb' }}>
-                What We Found In Your Code vs What FDIC Requires
+                {validationDone
+                  ? 'What We Found In Your Code vs What FDIC Requires'
+                  : 'What We Found In Your Code'}
               </div>
               <div style={{ fontSize: 11, color: '#6b7280', marginTop: 2 }}>
                 We scanned {layer0Agent.description ?? 'your code'} and automatically extracted{' '}
-                <strong style={{ color: '#60a5fa' }}>{layer0Findings.length} compliance parameters</strong>.{' '}
-                Here is how they compare to FDIC requirements.
+                <strong style={{ color: '#60a5fa' }}>{layer0Findings.length} compliance parameters</strong>.
+                {validationDone
+                  ? ' Here is how they compare to FDIC requirements from the regulatory documents.'
+                  : <span style={{ color: '#f59e0b' }}> Click <strong>Check Against FDIC Rulebook</strong> below to compare against FDIC requirements.</span>
+                }
               </div>
             </div>
-            <span style={{
-              padding: '3px 10px', borderRadius: 8, fontSize: 11, fontWeight: 700,
-              background: 'rgba(59,130,246,0.12)', border: '1px solid rgba(59,130,246,0.25)',
-              color: '#3b82f6',
-            }}>
-              {layer0Findings.filter(f => f.evidence?.gap).length} gaps found
-            </span>
+            {validationDone && (
+              <span style={{
+                padding: '3px 10px', borderRadius: 8, fontSize: 11, fontWeight: 700,
+                background: 'rgba(59,130,246,0.12)', border: '1px solid rgba(59,130,246,0.25)',
+                color: '#3b82f6',
+              }}>
+                {layer0Findings.filter(f => f.evidence?.gap).length} gaps found
+              </span>
+            )}
           </div>
 
           {/* Table header */}
           <div style={{
             display: 'grid',
-            gridTemplateColumns: '200px 1fr 1fr 110px',
+            gridTemplateColumns: validationDone ? '200px 1fr 1fr 110px' : '200px 1fr',
             gap: 0, padding: '8px 20px',
             background: '#0d1117',
             borderBottom: '1px solid #1a2030',
           }}>
-            {["WHAT WE'RE CHECKING", 'FOUND IN YOUR CODE', 'FDIC REQUIRES', 'STATUS'].map(h => (
+            {(validationDone
+              ? ["WHAT WE'RE CHECKING", 'FOUND IN YOUR CODE', 'FDIC REQUIRES', 'STATUS']
+              : ["WHAT WE'RE CHECKING", 'FOUND IN YOUR CODE']
+            ).map(h => (
               <span key={h} style={{ fontSize: 10, fontWeight: 700, color: '#4b5563', letterSpacing: 1 }}>{h}</span>
             ))}
           </div>
@@ -312,7 +322,7 @@ export function ControlLibrary({ pipelineStatus, selectedSystem, agents = [] }: 
                   key={idx}
                   style={{
                     display: 'grid',
-                    gridTemplateColumns: '200px 1fr 1fr 110px',
+                    gridTemplateColumns: validationDone ? '200px 1fr 1fr 110px' : '200px 1fr',
                     gap: 0, padding: '10px 20px',
                     borderBottom: '1px solid #1a2030',
                     background: idx % 2 === 0 ? 'transparent' : '#0d111a',
@@ -337,9 +347,9 @@ export function ControlLibrary({ pipelineStatus, selectedSystem, agents = [] }: 
                     <span style={{
                       display: 'inline-block',
                       padding: '3px 10px', borderRadius: 6, fontSize: 12, fontWeight: 700,
-                      background: hasGap ? 'rgba(239,68,68,0.1)' : 'rgba(16,185,129,0.1)',
-                      border: `1px solid ${hasGap ? 'rgba(239,68,68,0.25)' : 'rgba(16,185,129,0.25)'}`,
-                      color: hasGap ? '#ef4444' : '#10b981',
+                      background: 'rgba(59,130,246,0.1)',
+                      border: '1px solid rgba(59,130,246,0.25)',
+                      color: '#60a5fa',
                       fontFamily: 'monospace',
                     }}>
                       {ev.code_value ?? 'Not found in code'}
@@ -354,38 +364,42 @@ export function ControlLibrary({ pipelineStatus, selectedSystem, agents = [] }: 
                     )}
                   </div>
 
-                  {/* FDIC requires */}
-                  <div style={{ paddingRight: 8 }}>
-                    <span style={{
-                      display: 'inline-block',
-                      padding: '3px 10px', borderRadius: 6, fontSize: 12, fontWeight: 700,
-                      background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.25)',
-                      color: '#10b981', fontFamily: 'monospace',
-                    }}>
-                      {ev.required_value ?? '—'}
-                    </span>
-                    {ev.gap && (
-                      <div style={{ marginTop: 4, fontSize: 10, color: '#9ca3af', lineHeight: 1.4, maxWidth: 280 }}>
-                        {ev.gap}
-                      </div>
-                    )}
-                  </div>
+                  {/* FDIC requires — only after RAG validation */}
+                  {validationDone && (
+                    <div style={{ paddingRight: 8 }}>
+                      <span style={{
+                        display: 'inline-block',
+                        padding: '3px 10px', borderRadius: 6, fontSize: 12, fontWeight: 700,
+                        background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.25)',
+                        color: '#10b981', fontFamily: 'monospace',
+                      }}>
+                        {ev.required_value ?? '—'}
+                      </span>
+                      {ev.gap && (
+                        <div style={{ marginTop: 4, fontSize: 10, color: '#9ca3af', lineHeight: 1.4, maxWidth: 280 }}>
+                          {ev.gap}
+                        </div>
+                      )}
+                    </div>
+                  )}
 
-                  {/* Status pill */}
-                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 4 }}>
-                    <span style={{
-                      padding: '3px 10px', borderRadius: 20, fontSize: 11, fontWeight: 800,
-                      background: `${sevColor}18`, border: `1px solid ${sevColor}40`,
-                      color: sevColor,
-                    }}>
-                      {hasGap ? '❌ ' : '✅ '}{hasGap ? sev : 'OK'}
-                    </span>
-                    {f.remediation_recommendation && (
-                      <div style={{ fontSize: 10, color: '#6b7280', lineHeight: 1.4 }}>
-                        {f.remediation_recommendation.slice(0, 80)}{f.remediation_recommendation.length > 80 ? '…' : ''}
-                      </div>
-                    )}
-                  </div>
+                  {/* Status pill — only after RAG validation */}
+                  {validationDone && (
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 4 }}>
+                      <span style={{
+                        padding: '3px 10px', borderRadius: 20, fontSize: 11, fontWeight: 800,
+                        background: `${sevColor}18`, border: `1px solid ${sevColor}40`,
+                        color: sevColor,
+                      }}>
+                        {hasGap ? '❌ ' : '✅ '}{hasGap ? sev : 'OK'}
+                      </span>
+                      {f.remediation_recommendation && (
+                        <div style={{ fontSize: 10, color: '#6b7280', lineHeight: 1.4 }}>
+                          {f.remediation_recommendation.slice(0, 80)}{f.remediation_recommendation.length > 80 ? '…' : ''}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               );
             })}
