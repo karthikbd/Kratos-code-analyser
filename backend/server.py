@@ -753,107 +753,26 @@ async def _run_layer(
 
 # ── Layer Executors ────────────────────────────────────────────────────────────
 
-# Keywords that map each layer to relevant source file patterns
-_LAYER_FILE_KEYWORDS: dict[str, list[str]] = {
-    "layer1": ["orc", "assignment", "classif", "ownership", "pending", "router"],
-    "layer2": ["customer", "account", "data", "schema", "deposit"],
-    "layer3": ["calc", "insurance", "engine", "aggregate", "smdia"],
-    "layer4": ["output", "qdf", "are", "report", "coverage", "generator"],
-    "layer5": ["batch", "daily", "nightly", ".jcl", "exception", "error"],
-    "layer6": ["report", "cert", "annual", "coverage", "output"],
-    "layer7": ["extract", "etl", "batch", "flow", "lineage", "trace", "audit", ".jcl", ".sh", "config", "mapping"],
-}
-
 
 def _enrich_findings_with_source(
     findings: list,
     system_sources: dict[str, str],
 ) -> None:
     """
-    For each finding, locate the most relevant source file + line + code snippet
-    by searching for keywords from the finding's title/description in actual source files.
+    Source enrichment for findings.
+
+    Layer 0 findings already carry an exact source_file + line_number (set by the
+    evidence extractor from real regex matches), so nothing needs to be done here.
+
+    Layer 1–7 findings describe ABSENT or INCORRECT logic patterns — e.g. "IRR ORC
+    branch is missing", "pending reason code RAC not found".  There is no single
+    source line that IS the bug; the bug is the absence of something.  Guessing a line
+    with keyword scoring invariably points to an irrelevant line (often a comment that
+    merely mentions the keyword).  We therefore intentionally leave source_file and
+    line_number empty for Layer 1–7 findings.  The frontend hides the code viewer when
+    no source location is set.
     """
-    import re as _re
-
-    for f in findings:
-        if f.source_file:  # already set by layer
-            continue
-
-        title_lower = f.title.lower()
-        desc_lower = f.description.lower()
-
-        # Extract search keywords from finding
-        keywords: list[str] = []
-
-        # ORC type references (e.g. "ANC", "JNT", "SGL")
-        orc_match = _re.search(r"['\"]?([A-Z]{2,4})['\"]?", f.title)
-        if orc_match and len(orc_match.group(1)) <= 4:
-            keywords.append(orc_match.group(1))
-
-        # Quoted keywords from title (e.g. 'natural_person', 'beneficiary')
-        for m in _re.finditer(r"'([a-z_]+)'", title_lower):
-            keywords.append(m.group(1))
-
-        # Technical keywords from description
-        for kw in ["orc", "pending", "insurance", "beneficiary", "depositor",
-                    "account", "balance", "coverage", "output", "qdf", "are",
-                    "calculation", "smdia", "batch", "lineage", "etl", "extract",
-                    "trust", "government", "collateral", "retirement"]:
-            if kw in desc_lower:
-                keywords.append(kw)
-
-        if not keywords:
-            keywords = [title_lower.split()[0]] if title_lower else []
-
-        best_file = ""
-        best_line = 0
-        best_snippet = ""
-        best_score = 0
-
-        def _is_comment(_re_mod, raw: str, stripped_lower: str, ext: str) -> bool:
-            """True when the line is a comment and should be excluded from scoring."""
-            if ext in ('.cob', '.cpy'):
-                return (len(raw) > 6 and raw[6] == '*') or stripped_lower.startswith('*>')
-            if ext in ('.properties', '.sh', '.py', '.yml', '.yaml'):
-                return stripped_lower.startswith('#')
-            if ext == '.sql':
-                return stripped_lower.startswith('--') or stripped_lower.startswith('/*') or stripped_lower.startswith('*')
-            if ext == '.java':
-                return stripped_lower.startswith('//') or stripped_lower.startswith('/*') or stripped_lower.startswith('*')
-            if ext == '.xml':
-                return stripped_lower.startswith('<!--') or stripped_lower.startswith('-->')
-            if ext == '.jcl':
-                return stripped_lower.startswith('//*')
-            return False
-
-        for fname, content in system_sources.items():
-            import os as _os
-            ext = _os.path.splitext(fname)[1].lower()
-            lines = content.split('\n')
-            for line_no, line_text in enumerate(lines, start=1):
-                line_lower = line_text.lower().strip()
-                if not line_lower:
-                    continue
-                if _is_comment(_re, line_text, line_lower, ext):
-                    continue
-                score = sum(1 for kw in keywords if kw.lower() in line_lower)
-                if score > best_score:
-                    best_score = score
-                    best_file = fname
-                    best_line = line_no
-                    # Get surrounding context (up to 3 lines)
-                    start_l = max(0, line_no - 2)
-                    end_l = min(len(lines), line_no + 1)
-                    best_snippet = '\n'.join(lines[start_l:end_l]).strip()
-
-        if best_file and best_score > 0:
-            f.source_file = best_file
-            f.line_number = best_line
-            # NOTE: We intentionally do NOT set f.code_snippet here.
-            # The keyword matcher picks the highest-scoring line using generic terms
-            # (insurance, account, batch…) which is NOT reliably the line that caused
-            # the finding.  The frontend fetches the real code context on demand via
-            # GET /api/source-snippet?system_id=X&file_path=Y&line_number=N
+    pass  # Layer 0 is self-sufficient; keyword guessing for L1–7 is removed.
 
 def _execute_layer1(orc_code: str, pending_code: str):
     from backend.layers.layer1_orc_static import Layer1ORCStaticAnalyzer
