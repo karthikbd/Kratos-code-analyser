@@ -3,7 +3,7 @@ import {
   Shield, CheckCircle, XCircle, Loader2,
   Clock, FileWarning, ChevronDown, ChevronUp, Code2, RefreshCw,
 } from 'lucide-react';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import type { AgentDef, Finding } from '../types';
 
 const API_BASE = (import.meta.env.VITE_WS_URL || 'ws://localhost:8001/ws')
@@ -191,27 +191,35 @@ function FindingRow({ finding, index, controlSections, systemId }: { finding: Fi
     shown: false, loading: false, content: null,
     startLine: 1, highlightLine: 0, error: null,
   });
+  const hlRef = useRef<HTMLDivElement | null>(null);
+
+  // For Layer 0 findings the exact issue context is already carried in evidence.code_context
+  const inlineCtx = (finding.evidence?.code_context ?? '').trim();
+  const hasInlineCtx = inlineCtx.length > 0 && inlineCtx !== 'No code evidence found for this parameter in any scanned file.';
+  // Only enable the fetch button when we have a real file + line number
+  const canFetch = !!finding.source_file && !!systemId && (finding.line_number ?? 0) > 0;
 
   const fetchCode = async () => {
-    if (!finding.source_file || !systemId) return;
-    if (snippet.content) {
-      // toggle visibility
+    if (!canFetch) return;
+    if (snippet.content !== null) {
       setSnippet(s => ({ ...s, shown: !s.shown }));
       return;
     }
     setSnippet(s => ({ ...s, shown: true, loading: true, error: null }));
     try {
       const params = new URLSearchParams({
-        system_id: systemId,
-        file_path: finding.source_file,
-        line_number: String(finding.line_number || 0),
-        context_lines: '6',
+        system_id: systemId!,
+        file_path: finding.source_file!,
+        line_number: String(finding.line_number),
+        context_lines: '3',           // 3 lines before + issue line + 3 after = 7 total
       });
       const res = await fetch(`${API_BASE}/api/source-snippet?${params}`);
       const data = await res.json();
       if (data.error) throw new Error(data.error);
       setSnippet({ shown: true, loading: false, content: data.content,
         startLine: data.start_line, highlightLine: data.highlight_line, error: null });
+      // Auto-scroll the highlighted row into view after render
+      requestAnimationFrame(() => hlRef.current?.scrollIntoView({ block: 'nearest' }));
     } catch (e: unknown) {
       setSnippet(s => ({ ...s, loading: false,
         error: e instanceof Error ? e.message : String(e) }));
@@ -314,8 +322,33 @@ function FindingRow({ finding, index, controlSections, systemId }: { finding: Fi
               )}
             </div>
           )}
-          {/* Code Snippet — fetched on demand from the actual source file */}
-          {finding.source_file && systemId && (
+          {/* ── Inline code context (Layer 0 — exact line already in evidence) ── */}
+          {hasInlineCtx && (
+            <div style={{ marginTop: 6, borderRadius: 6, overflow: 'hidden', border: '1px solid #1e2538' }}>
+              <div style={{
+                padding: '3px 10px', background: '#161b22', fontSize: 9, fontWeight: 700,
+                color: '#6b7280', letterSpacing: 0.5, display: 'flex', justifyContent: 'space-between',
+              }}>
+                <span style={{ color: '#818cf8' }}>ISSUE CODE</span>
+                {finding.evidence?.code_file && finding.evidence.code_file !== '(not found)' && (
+                  <span>{finding.evidence.code_file}{finding.evidence.code_line && finding.evidence.code_line !== '0' ? ` :${finding.evidence.code_line}` : ''}</span>
+                )}
+              </div>
+              <pre style={{
+                margin: 0, padding: '8px 10px', fontSize: 10, lineHeight: '18px',
+                color: '#fde68a',                     /* amber — makes the issue stand out */
+                background: 'rgba(245,158,11,0.06)',
+                fontFamily: "'JetBrains Mono', 'Fira Code', monospace",
+                whiteSpace: 'pre-wrap', wordBreak: 'break-all',
+                borderLeft: '3px solid #f59e0b',
+              }}>
+                {inlineCtx}
+              </pre>
+            </div>
+          )}
+
+          {/* ── View full file context button (only when we have a reliable line number) ── */}
+          {canFetch && (
             <div style={{ marginTop: 4 }}>
               <button
                 onClick={fetchCode}
@@ -329,43 +362,50 @@ function FindingRow({ finding, index, controlSections, systemId }: { finding: Fi
                 {snippet.loading
                   ? <><RefreshCw size={11} style={{ animation: 'spin 1s linear infinite' }} /> Loading…</>
                   : snippet.shown
-                    ? <><ChevronUp size={11} /> Hide Code</>
-                    : <><Code2 size={11} /> View Code in {finding.source_file.split('/').pop()}{(finding.line_number ?? 0) > 0 ? ` :${finding.line_number}` : ''}</>}
+                    ? <><ChevronUp size={11} /> Hide context</>
+                    : <><Code2 size={11} /> Show ±3 lines in {finding.source_file!.split('/').pop()} :{finding.line_number}</>}
               </button>
               {snippet.shown && !snippet.loading && (
                 snippet.error
                   ? <div style={{ fontSize: 10, color: '#f87171', marginTop: 4 }}>{snippet.error}</div>
                   : (
                     <div style={{ marginTop: 4, borderRadius: 6, overflow: 'hidden', border: '1px solid #1e2538' }}>
-                      {/* file header */}
                       <div style={{
                         padding: '3px 10px', background: '#161b22', fontSize: 9, fontWeight: 700,
                         color: '#6b7280', letterSpacing: 0.5, display: 'flex', justifyContent: 'space-between',
                       }}>
                         <span>{finding.source_file}</span>
-                        {snippet.highlightLine > 0 && <span>Line {snippet.highlightLine}</span>}
+                        {snippet.highlightLine > 0 && (
+                          <span style={{ color: '#3b82f6' }}>↳ issue at line {snippet.highlightLine}</span>
+                        )}
                       </div>
-                      <div style={{ background: '#0d1117', overflow: 'auto', maxHeight: 200 }}>
+                      {/* No maxHeight — 7 lines max (3+1+3), always fully visible */}
+                      <div style={{ background: '#0d1117' }}>
                         {(snippet.content ?? '').split('\n').map((line, li) => {
                           const lineNo = snippet.startLine + li;
                           const isHl = lineNo === snippet.highlightLine;
                           return (
-                            <div key={li} style={{
-                              display: 'flex', alignItems: 'flex-start',
-                              background: isHl ? 'rgba(59,130,246,0.12)' : 'transparent',
-                              borderLeft: isHl ? '2px solid #3b82f6' : '2px solid transparent',
-                            }}>
+                            <div
+                              key={li}
+                              ref={isHl ? hlRef : null}
+                              style={{
+                                display: 'flex', alignItems: 'flex-start',
+                                background: isHl ? 'rgba(239,68,68,0.15)' : 'transparent',
+                                borderLeft: isHl ? '3px solid #ef4444' : '3px solid transparent',
+                              }}
+                            >
                               <span style={{
                                 minWidth: 36, padding: '0 6px', fontSize: 9,
-                                color: isHl ? '#3b82f6' : '#374151',
+                                color: isHl ? '#ef4444' : '#374151',
                                 fontFamily: "'JetBrains Mono', monospace",
                                 userSelect: 'none', textAlign: 'right', lineHeight: '18px',
+                                fontWeight: isHl ? 700 : 400,
                               }}>{lineNo}</span>
                               <pre style={{
                                 margin: 0, padding: '0 8px', fontSize: 10, lineHeight: '18px',
-                                color: isHl ? '#e5e7eb' : '#a5b4fc',
+                                color: isHl ? '#fca5a5' : '#6b7280',
                                 fontFamily: "'JetBrains Mono', 'Fira Code', monospace",
-                                whiteSpace: 'pre', flex: 1, minWidth: 0,
+                                whiteSpace: 'pre-wrap', wordBreak: 'break-all', flex: 1,
                               }}>{line}</pre>
                             </div>
                           );
