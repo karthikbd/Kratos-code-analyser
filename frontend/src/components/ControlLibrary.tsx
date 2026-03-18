@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  Shield, CheckCircle2, XCircle, Search,
+  Shield, CheckCircle2, Search,
   ChevronDown, ChevronRight, Database, Loader2, BookOpen,
-  Filter, FileCode2, Radar, Lock, Download,
+  Filter, FileCode2, Radar, Download,
 } from 'lucide-react';
-import type { FDICControl, ControlSummary, ControlValidationResult, RagControl, RagComparisonData, AgentDef } from '../types';
+import type { RagControl, RagComparisonData, AgentDef } from '../types';
 
 const API_BASE = (import.meta.env.VITE_WS_URL || 'ws://localhost:8001/ws')
   .replace('ws://', 'http://').replace('wss://', 'https://').replace('/ws', '');
@@ -17,20 +17,6 @@ const SEVERITY_COLORS: Record<string, string> = {
   LOW: '#06b6d4',
 };
 
-const CATEGORY_COLORS: Record<string, string> = {
-  'Recordkeeping': '#3b82f6',
-  'ORC Assignment': '#8b5cf6',
-  'Data Quality': '#f59e0b',
-  'Calculation Engine': '#10b981',
-  'Output Files': '#06b6d4',
-  'Pending Management': '#f97316',
-  'Behavioral / Runtime': '#ec4899',
-  'Certification': '#6366f1',
-  'ARE Processing': '#14b8a6',
-  'Insurance Coverage': '#a855f7',
-  'Data Lineage': '#22d3ee',
-};
-
 interface ControlLibraryProps {
   pipelineStatus: string;
   selectedSystem: string;
@@ -39,43 +25,14 @@ interface ControlLibraryProps {
 }
 
 export function ControlLibrary({ pipelineStatus, selectedSystem, agents = [] }: ControlLibraryProps) {
-  const [controls, setControls] = useState<FDICControl[]>([]);
-  const [summary, setSummary] = useState<ControlSummary | null>(null);
-  const [validationResults, setValidationResults] = useState<ControlValidationResult[]>([]);
   const [validating, setValidating] = useState(false);
   const [validationDone, setValidationDone] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [filterCategory, setFilterCategory] = useState<string>('all');
-  const [filterRegulation, setFilterRegulation] = useState<string>('all');
-  const [filterLayer, setFilterLayer] = useState<number>(0);
-  const [expandedControl, setExpandedControl] = useState<string | null>(null);
   const [ragComparison, setRagComparison] = useState<RagComparisonData | null>(null);
-  const [dataLoaded, setDataLoaded] = useState(false);
   const [expandedRagSection, setExpandedRagSection] = useState<string | null>(null);
   const [ragSearchTerm, setRagSearchTerm] = useState('');
   const [ragFilterSeverity, setRagFilterSeverity] = useState<string>('all');
   const [ragFilterRegulation, setRagFilterRegulation] = useState<string>('all');
   const [loadingRag, setLoadingRag] = useState(false);
-
-  // Fetch controls only after pipeline completes
-  useEffect(() => {
-    if (pipelineStatus !== 'completed' || dataLoaded) return;
-    setLoading(true);
-    (async () => {
-      try {
-        const res = await fetch(`${API_BASE}/api/controls?system_id=${encodeURIComponent(selectedSystem)}`);
-        const data = await res.json();
-        setControls(data.controls || []);
-        setSummary(data.summary || null);
-      } catch (e) {
-        console.error('Failed to fetch controls:', e);
-      } finally {
-        setLoading(false);
-        setDataLoaded(true);
-      }
-    })();
-  }, [pipelineStatus, dataLoaded]);
 
   // RAG comparison is loaded on demand — never auto-fetched
   const loadRagComparison = useCallback(async () => {
@@ -106,11 +63,7 @@ export function ControlLibrary({ pipelineStatus, selectedSystem, agents = [] }: 
 
   // Reset all data when the selected operational system changes
   useEffect(() => {
-    setDataLoaded(false);
-    setControls([]);
-    setSummary(null);
     setRagComparison(null);
-    setValidationResults([]);
     setValidationDone(false);
   }, [selectedSystem]);
 
@@ -118,62 +71,35 @@ export function ControlLibrary({ pipelineStatus, selectedSystem, agents = [] }: 
   // always reflect the most recent analysis (not stale data from a prior run)
   useEffect(() => {
     if (pipelineStatus === 'running') {
-      setDataLoaded(false);
-      setControls([]);
-      setSummary(null);
       setRagComparison(null);
-      setValidationResults([]);
       setValidationDone(false);
     }
   }, [pipelineStatus]);
 
-  // Validate against RAG — runs queries in parallel on backend, then auto-loads RAG comparison
+  // Check FDIC regulatory sections against source code via rag-comparison endpoint
   const validateAgainstRag = useCallback(async () => {
     setValidating(true);
+    setLoadingRag(true);
     try {
-      const res = await fetch(`${API_BASE}/api/controls/validate?system_id=${encodeURIComponent(selectedSystem)}`, { method: 'POST' });
+      const res = await fetch(
+        `${API_BASE}/api/controls/rag-comparison?system_id=${encodeURIComponent(selectedSystem)}`
+      );
       const data = await res.json();
-      setValidationResults(data.results || []);
+      setRagComparison(data);
       setValidationDone(true);
-      // Auto-load RAG comparison and switch to RAG tab
-      setLoadingRag(true);
-      try {
-        const ragRes = await fetch(`${API_BASE}/api/controls/rag-comparison?system_id=${encodeURIComponent(selectedSystem)}`);
-        const ragData = await ragRes.json();
-        setRagComparison(ragData);
-      } catch (ragErr) {
-        console.error('Auto RAG comparison load failed:', ragErr);
-      } finally {
-        setLoadingRag(false);
-      }
     } catch (e) {
-      console.error('RAG validation failed:', e);
+      console.error('FDIC section check failed:', e);
     } finally {
       setValidating(false);
+      setLoadingRag(false);
     }
-  }, [selectedSystem, pipelineStatus]);
+  }, [selectedSystem]);
 
-  // Filter controls
-  const filtered = controls.filter(c => {
-    // Exclude controls marked not applicable after pipeline analysis
-    if (c.applicable === false) return false;
-    if (searchTerm) {
-      const term = searchTerm.toLowerCase();
-      if (!c.control_id.toLowerCase().includes(term) && !c.title.toLowerCase().includes(term) && !c.description.toLowerCase().includes(term) && !c.section.toLowerCase().includes(term))
-        return false;
-    }
-    if (filterCategory !== 'all' && c.category !== filterCategory) return false;
-    if (filterRegulation !== 'all' && c.regulation !== filterRegulation) return false;
-    if (filterLayer > 0 && c.layer !== filterLayer) return false;
-    return true;
-  });
-
-  const categories = [...new Set(controls.map(c => c.category))];
-  const regulations = [...new Set(controls.map(c => c.regulation))];
-  const validatedCount = validationResults.filter(r => r.rag_validated).length;
+  const foundCount = ragComparison?.found_in_code ?? 0;
+  const totalSections = ragComparison?.total_sections ?? 0;
 
   // Show "waiting for analysis" when pipeline hasn't run yet
-  if (pipelineStatus === 'idle' && !dataLoaded) {
+  if (pipelineStatus === 'idle') {
     return (
       <motion.div
         initial={{ opacity: 0, y: 20 }}
@@ -227,15 +153,6 @@ export function ControlLibrary({ pipelineStatus, selectedSystem, agents = [] }: 
           AI agents are scanning source code against FDIC Part 370 regulatory controls...
         </div>
       </motion.div>
-    );
-  }
-
-  if (loading) {
-    return (
-      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: 300 }}>
-        <Loader2 size={32} color="#3b82f6" style={{ animation: 'spin 1s linear infinite' }} />
-        <span style={{ marginLeft: 12, color: '#9ca3af' }}>Loading FDIC Control Library...</span>
-      </div>
     );
   }
 
@@ -437,7 +354,7 @@ export function ControlLibrary({ pipelineStatus, selectedSystem, agents = [] }: 
           {validating ? (
             <><Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> Checking…</>
           ) : validationDone ? (
-            <><CheckCircle2 size={14} /> {validatedCount}/{validationResults.length} Rulebook Checks Done</>
+            <><CheckCircle2 size={14} /> {foundCount}/{totalSections} FDIC Sections in Code</>
           ) : (
             <><Database size={14} /> Check Against FDIC Rulebook</>
           )}
@@ -459,107 +376,6 @@ export function ControlLibrary({ pipelineStatus, selectedSystem, agents = [] }: 
           </motion.button>
         )}
       </div>
-
-      {/* ═══ REGULATORY COVERAGE (RAG) ═══ */}
-      {/* Inline severity breakdown — only after RAG validation */}
-      {validationDone && summary && (
-        <>
-          {/* One-line context header */}
-          <div style={{
-            display: 'flex', alignItems: 'center', gap: 8,
-            fontSize: 11, fontWeight: 700, color: '#6b7280', letterSpacing: 1.2,
-            textTransform: 'uppercase', paddingBottom: 4,
-            borderBottom: '1px solid #2a335050',
-          }}>
-            <BookOpen size={12} color="#6b7280" />
-            FDIC Compliance Control Analysis — {summary.total_controls} rules evaluated across your system
-            {validationDone && (
-              <span style={{
-                marginLeft: 'auto', padding: '2px 10px', borderRadius: 8, fontSize: 10,
-                background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.25)',
-                color: '#10b981', fontWeight: 700,
-              }}>
-                ✅ {validatedCount}/{validationResults.length} FDIC Rulebook Validated
-              </span>
-            )}
-          </div>
-
-          {/* no-op placeholder to preserve structure */}
-          <>{}</>
-
-          {/* Severity Pass/Fail Breakdown Table */}
-          <div style={{
-            background: '#111827', borderRadius: 12, border: '1px solid #2a3350', padding: 16,
-          }}>
-            <div style={{ fontSize: 12, fontWeight: 600, color: '#9ca3af', marginBottom: 12, textTransform: 'uppercase', letterSpacing: 1 }}>
-              Severity Breakdown — Compliance Status by Risk Level
-            </div>
-            {/* Header row */}
-            <div style={{ display: 'grid', gridTemplateColumns: '120px 1fr 80px 90px 90px', gap: 0,
-              borderBottom: '1px solid #2a3350', paddingBottom: 6, marginBottom: 6 }}>
-              {['SEVERITY', 'CONTROLS', 'TOTAL', 'COMPLIANT', 'FINDINGS'].map(h => (
-                <span key={h} style={{ fontSize: 10, fontWeight: 700, color: '#6b7280', letterSpacing: 1 }}>{h}</span>
-              ))}
-            </div>
-            {[
-              { key: 'CRITICAL', color: '#ef4444', bg: 'rgba(239,68,68,0.08)' },
-              { key: 'HIGH',     color: '#f97316', bg: 'rgba(249,115,22,0.08)' },
-              { key: 'MEDIUM',   color: '#f59e0b', bg: 'rgba(245,158,11,0.08)' },
-              { key: 'LOW',      color: '#06b6d4', bg: 'rgba(6,182,212,0.08)'  },
-            ].map(({ key, color, bg }) => {
-              const total   = summary.by_severity?.[key] || 0;
-              if (total === 0) return null;
-              const passed  = controls.filter(c => c.severity?.toUpperCase() === key && c.analysis_status === 'PASS').length;
-              const failed  = controls.filter(c => c.severity?.toUpperCase() === key && c.analysis_status === 'FAIL').length;
-              const passRatio = total > 0 ? passed / total : 0;
-              return (
-                <div key={key} style={{ display: 'grid', gridTemplateColumns: '120px 1fr 80px 90px 90px',
-                  gap: 0, alignItems: 'center', padding: '8px 0',
-                  borderBottom: '1px solid #1a2030' }}>
-                  {/* Severity badge */}
-                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-                    <span style={{ width: 10, height: 10, borderRadius: 2, background: color, flexShrink: 0 }} />
-                    <span style={{ fontSize: 12, fontWeight: 700, color }}>{key}</span>
-                  </span>
-                  {/* Progress bar */}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, paddingRight: 12 }}>
-                    <div style={{ flex: 1, height: 6, borderRadius: 3, background: '#1f2937', overflow: 'hidden' }}>
-                      <div style={{ height: '100%', width: `${passRatio * 100}%`,
-                        background: passRatio >= 0.7 ? '#10b981' : passRatio >= 0.4 ? '#f59e0b' : '#ef4444',
-                        borderRadius: 3, transition: 'width 0.4s ease' }} />
-                    </div>
-                    <span style={{ fontSize: 10, color: '#6b7280', whiteSpace: 'nowrap' }}>{Math.round(passRatio * 100)}%</span>
-                  </div>
-                  {/* Counts */}
-                  <span style={{ fontSize: 13, fontWeight: 700, color: '#e5e7eb', background: bg,
-                    borderRadius: 4, padding: '2px 8px', textAlign: 'center' }}>{total}</span>
-                  <span style={{ fontSize: 13, fontWeight: 700, color: '#10b981',
-                    background: 'rgba(16,185,129,0.08)', borderRadius: 4, padding: '2px 8px', textAlign: 'center' }}>{passed}</span>
-                  <span style={{ fontSize: 13, fontWeight: 700, color: '#ef4444',
-                    background: 'rgba(239,68,68,0.08)', borderRadius: 4, padding: '2px 8px', textAlign: 'center' }}>{failed}</span>
-                </div>
-              );
-            })}
-            {/* Totals footer */}
-            {(() => {
-              const totalApplicable = summary.total_controls;
-              const totalPassed = controls.filter(c => c.analysis_status === 'PASS').length;
-              const totalFailed = controls.filter(c => c.analysis_status === 'FAIL').length;
-              return (
-                <div style={{ display: 'grid', gridTemplateColumns: '120px 1fr 80px 90px 90px',
-                  gap: 0, alignItems: 'center', paddingTop: 8, borderTop: '1px solid #2a3350', marginTop: 4 }}>
-                  <span style={{ fontSize: 11, fontWeight: 700, color: '#9ca3af' }}>TOTAL</span>
-                  <div />
-                  <span style={{ fontSize: 13, fontWeight: 700, color: '#e5e7eb', textAlign: 'center' }}>{totalApplicable}</span>
-                  <span style={{ fontSize: 13, fontWeight: 700, color: '#10b981', textAlign: 'center' }}>{totalPassed}</span>
-                  <span style={{ fontSize: 13, fontWeight: 700, color: '#ef4444', textAlign: 'center' }}>{totalFailed}</span>
-                </div>
-              );
-            })()}
-          </div>
-        </>
-      )}
-
 
       {/* ═══ RAG CONTROLS VIEW ═══ */}
       <RagControlsView
@@ -602,181 +418,6 @@ function FilterSelect({ value, onChange, options }: {
       </select>
       <ChevronDown size={12} style={{ position: 'absolute', right: 8, color: '#6b7280', pointerEvents: 'none' }} />
     </div>
-  );
-}
-
-function ControlRow({ control, ragResult, index, expanded, onToggle }: {
-  control: FDICControl;
-  ragResult?: ControlValidationResult;
-  index: number;
-  expanded: boolean;
-  onToggle: () => void;
-}) {
-  const catColor = CATEGORY_COLORS[control.category] || '#6b7280';
-  const sevColor = SEVERITY_COLORS[control.severity] || '#6b7280';
-
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 8 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: index * 0.015, duration: 0.25 }}
-      style={{
-        background: '#1e2538',
-        border: `1px solid ${expanded ? '#3b82f644' : '#2a3350'}`,
-        borderRadius: 10,
-        overflow: 'hidden',
-        transition: 'border-color 0.2s, opacity 0.2s',
-        opacity: control.analysis_status === 'NOT_APPLICABLE' ? 0.45 : 1,
-      }}
-    >
-      {/* Header row */}
-      <div
-        onClick={onToggle}
-        style={{
-          padding: '12px 16px', cursor: 'pointer',
-          display: 'flex', alignItems: 'center', gap: 12,
-        }}
-      >
-        {/* Expand arrow */}
-        <div style={{ color: '#6b7280', minWidth: 16 }}>
-          {expanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
-        </div>
-
-        {/* Control ID */}
-        <div style={{
-          minWidth: 90, fontSize: 11, fontWeight: 700, color: '#3b82f6',
-          fontFamily: "'JetBrains Mono', monospace",
-        }}>
-          {control.control_id}
-        </div>
-
-        {/* Title */}
-        <div style={{ flex: 1, fontSize: 13, color: '#e5e7eb', fontWeight: 500 }}>
-          {control.title}
-        </div>
-
-        {/* Category badge */}
-        <div style={{
-          padding: '2px 8px', borderRadius: 6,
-          background: `${catColor}12`, border: `1px solid ${catColor}25`,
-          fontSize: 10, color: catColor, fontWeight: 600, whiteSpace: 'nowrap',
-        }}>
-          {control.category}
-        </div>
-
-        {/* Severity badge */}
-        <div style={{
-          padding: '2px 8px', borderRadius: 6, minWidth: 64, textAlign: 'center',
-          background: `${sevColor}12`, border: `1px solid ${sevColor}25`,
-          fontSize: 10, fontWeight: 700, color: sevColor,
-        }}>
-          {control.severity}
-        </div>
-
-        {/* Layer badge */}
-        <div style={{
-          padding: '2px 8px', borderRadius: 6,
-          background: 'rgba(99,102,241,0.1)', border: '1px solid rgba(99,102,241,0.25)',
-          fontSize: 10, fontWeight: 600, color: '#818cf8', whiteSpace: 'nowrap',
-        }}>
-          L{control.layer}
-        </div>
-
-        {/* RAG validation indicator */}
-        {ragResult !== undefined ? (
-          ragResult.rag_validated ? (
-            <CheckCircle2 size={18} color="#10b981" style={{ minWidth: 18 }} />
-          ) : (
-            <XCircle size={18} color="#ef4444" style={{ minWidth: 18 }} />
-          )
-        ) : (
-          <div style={{ width: 18, height: 18, borderRadius: '50%', border: '2px solid #2a3350', minWidth: 18 }} />
-        )}
-
-        {/* Analysis pass/fail/n-a status */}
-        {control.analysis_status && control.analysis_status !== 'NOT_RUN' && (
-          <div style={{
-            padding: '2px 8px', borderRadius: 6, minWidth: 40, textAlign: 'center',
-            background: control.analysis_status === 'PASS' ? 'rgba(16,185,129,0.1)'
-              : control.analysis_status === 'NOT_APPLICABLE' ? 'rgba(107,114,128,0.1)'
-              : 'rgba(239,68,68,0.1)',
-            border: `1px solid ${control.analysis_status === 'PASS' ? 'rgba(16,185,129,0.25)'
-              : control.analysis_status === 'NOT_APPLICABLE' ? 'rgba(107,114,128,0.25)'
-              : 'rgba(239,68,68,0.25)'}`,
-            fontSize: 10, fontWeight: 700,
-            color: control.analysis_status === 'PASS' ? '#10b981'
-              : control.analysis_status === 'NOT_APPLICABLE' ? '#6b7280'
-              : '#ef4444',
-          }}>
-            {control.analysis_status === 'PASS' ? 'COMPLIANT'
-              : control.analysis_status === 'FAIL' ? 'FINDINGS'
-              : control.analysis_status === 'NOT_APPLICABLE' ? 'N/A'
-              : control.analysis_status}
-          </div>
-        )}
-      </div>
-
-      {/* Expanded detail */}
-      <AnimatePresence>
-        {expanded && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.2 }}
-            style={{ overflow: 'hidden' }}
-          >
-            <div style={{
-              borderTop: '1px solid #2a3350', padding: '14px 16px 14px 44px',
-              display: 'flex', flexDirection: 'column', gap: 10,
-            }}>
-              {/* Description */}
-              <div style={{ fontSize: 12, color: '#d1d5db', lineHeight: 1.6 }}>
-                {control.description}
-              </div>
-
-              {/* Metadata */}
-              <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', fontSize: 11 }}>
-                <div>
-                  <span style={{ color: '#6b7280' }}>Regulation: </span>
-                  <span style={{ color: '#3b82f6', fontWeight: 600 }}>{control.regulation}</span>
-                </div>
-                <div>
-                  <span style={{ color: '#6b7280' }}>Section: </span>
-                  <span style={{ color: '#8b5cf6', fontWeight: 600 }}>{control.section}</span>
-                </div>
-                <div>
-                  <span style={{ color: '#6b7280' }}>Validated by: </span>
-                  <span style={{ color: '#e5e7eb', fontWeight: 600 }}>{control.layer_name}</span>
-                </div>
-              </div>
-
-              {/* RAG Citation */}
-              {ragResult && (
-                <div style={{
-                  padding: '10px 14px', borderRadius: 8,
-                  background: ragResult.rag_validated
-                    ? 'rgba(16,185,129,0.06)' : 'rgba(239,68,68,0.06)',
-                  border: `1px solid ${ragResult.rag_validated ? 'rgba(16,185,129,0.2)' : 'rgba(239,68,68,0.2)'}`,
-                }}>
-                  <div style={{
-                    fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1,
-                    color: ragResult.rag_validated ? '#10b981' : '#ef4444', marginBottom: 6,
-                  }}>
-                    {ragResult.rag_validated ? 'RAG Validated — Regulatory Citation Found' : 'RAG Validation Failed — No Citation Match'}
-                  </div>
-                  {ragResult.rag_citation && (
-                    <div style={{ fontSize: 11, color: '#9ca3af', lineHeight: 1.5, fontStyle: 'italic' }}>
-                      "{ragResult.rag_citation}"
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </motion.div>
   );
 }
 
@@ -849,15 +490,18 @@ function RagControlsView({
     );
   }
 
-  const classified = ragComparison.rag_only_classified || [];
-  const ragSeverities = [...new Set(classified.map(c => c.severity))];
-  const ragRegulations = [...new Set(classified.map(c => c.regulation))];
+  const gapSections: RagControl[] = ragComparison.gap_sections || [];
+  const ragSeverities = [...new Set(gapSections.map((c: RagControl) => c.severity))];
+  const ragRegulations = [...new Set(gapSections.map((c: RagControl) => c.regulation))];
 
-  const filtered = classified.filter(item => {
+  const filtered = gapSections.filter((item: RagControl) => {
     if (searchTerm) {
       const term = searchTerm.toLowerCase();
-      if (!item.section.toLowerCase().includes(term) && !item.regulation.toLowerCase().includes(term))
-        return false;
+      if (
+        !item.section.toLowerCase().includes(term) &&
+        !item.regulation.toLowerCase().includes(term) &&
+        !(item.title ?? '').toLowerCase().includes(term)
+      ) return false;
     }
     if (filterSeverity !== 'all' && item.severity !== filterSeverity) return false;
     if (filterRegulation !== 'all' && item.regulation !== filterRegulation) return false;
@@ -872,12 +516,13 @@ function RagControlsView({
         background: 'rgba(139,92,246,0.06)', border: '1px solid rgba(139,92,246,0.18)',
         fontSize: 12, color: '#9ca3af', lineHeight: 1.7,
       }}>
-        <span style={{ color: '#a78bfa', fontWeight: 700 }}>What is this section?</span>
-        {'  '}The FDIC publishes detailed rulebooks (12 CFR 330, 370, the IT Guide, etc.). After reading them,
-        our AI found regulation topics that may not yet be fully addressed in your system.
-        Think of it as:{' '}
-        <em style={{ color: '#d1d5db' }}>"Here are chapters in the FDIC rulebook your system should review."</em>
-        {'  '}Each item below is a section the AI flagged as potentially relevant to your setup.
+        <span style={{ color: '#a78bfa', fontWeight: 700 }}>What is this view?</span>
+        {'  '}We read every section of the FDIC rulebooks (12 CFR 330, 370, 360.8, the IT Guide) and checked
+        whether each section is meaningfully addressed in your source code.
+        Sections found in code appear in <span style={{ color: '#10b981', fontWeight: 600 }}>covered</span>{' '}
+        — sections not found become{' '}
+        <span style={{ color: '#ef4444', fontWeight: 600 }}>gaps</span>{' '}
+        your team should review.
       </div>
 
       {/* Compact summary line */}
@@ -889,18 +534,18 @@ function RagControlsView({
       }}>
         <Radar size={14} color="#8b5cf6" />
         <span style={{ color: '#9ca3af' }}>
-          <span style={{ color: '#a78bfa', fontWeight: 700 }}>{ragComparison.rag_only_count}</span> regulation topics found
+          <span style={{ color: '#10b981', fontWeight: 700 }}>{ragComparison.found_in_code}</span>/<span style={{ color: '#e5e7eb', fontWeight: 700 }}>{ragComparison.total_sections}</span> FDIC sections in code
         </span>
-        {ragComparison.semantic_coverage_pct !== undefined && (
-          <>
-            <div style={{ width: 1, height: 16, background: '#2a3350' }} />
-            <span style={{ color: '#9ca3af' }}>
-              <span style={{ color: '#10b981', fontWeight: 700 }}>{ragComparison.semantic_coverage_pct}%</span> overlap with your current controls
-            </span>
-          </>
-        )}
+        <div style={{ width: 1, height: 16, background: '#2a3350' }} />
+        <span style={{ color: '#9ca3af' }}>
+          <span style={{ color: '#ef4444', fontWeight: 700 }}>{ragComparison.gaps_count}</span> gaps
+        </span>
+        <div style={{ width: 1, height: 16, background: '#2a3350' }} />
+        <span style={{ color: '#9ca3af' }}>
+          <span style={{ color: '#a78bfa', fontWeight: 700 }}>{ragComparison.code_coverage_pct}%</span> code coverage
+        </span>
         {(['CRITICAL','HIGH','MEDIUM','LOW'] as const)
-          .filter(k => (ragComparison.rag_only_by_severity?.[k] || 0) > 0)
+          .filter(k => (ragComparison.gaps_by_severity?.[k] || 0) > 0)
           .map(k => {
             const c = k === 'CRITICAL' ? '#ef4444' : k === 'HIGH' ? '#f97316' : k === 'MEDIUM' ? '#f59e0b' : '#06b6d4';
             return (
@@ -908,7 +553,7 @@ function RagControlsView({
                 padding: '2px 8px', borderRadius: 8, fontSize: 11, fontWeight: 700,
                 background: `${c}15`, border: `1px solid ${c}30`, color: c,
               }}>
-                {ragComparison.rag_only_by_severity?.[k]} {k}
+                {ragComparison.gaps_by_severity?.[k]} {k}
               </span>
             );
           })}
@@ -920,7 +565,7 @@ function RagControlsView({
         textTransform: 'uppercase', paddingBottom: 4,
         borderBottom: '1px solid #2a335050',
       }}>
-        Regulation topics not yet fully addressed — {filtered.length} sections
+        FDIC sections not found in your code — {filtered.length} gaps
       </div>
 
       {/* RAG Coverage Bar */}
@@ -928,7 +573,7 @@ function RagControlsView({
         background: '#111827', borderRadius: 12, border: '1px solid #2a3350', padding: 16,
       }}>
         <div style={{ fontSize: 12, fontWeight: 600, color: '#9ca3af', marginBottom: 10, textTransform: 'uppercase', letterSpacing: 1 }}>
-          Risk level split — {ragComparison.rag_only_count} topics
+          Gaps by risk level — {ragComparison.gaps_count} unaddressed FDIC sections
         </div>
         <div style={{ display: 'flex', gap: 0, borderRadius: 6, overflow: 'hidden', height: 10, marginBottom: 10 }}>
           {[
@@ -937,8 +582,8 @@ function RagControlsView({
             { key: 'MEDIUM', color: '#f59e0b' },
             { key: 'LOW', color: '#06b6d4' },
           ].map(({ key, color }) => {
-            const count = ragComparison.rag_only_by_severity?.[key] || 0;
-            const pct = ragComparison.rag_only_count > 0 ? (count / ragComparison.rag_only_count * 100) : 0;
+            const count = ragComparison.gaps_by_severity?.[key] || 0;
+            const pct = ragComparison.gaps_count > 0 ? (count / ragComparison.gaps_count * 100) : 0;
             return pct > 0 ? (
               <div key={key} style={{ width: `${pct}%`, background: color, minWidth: pct > 0 ? 2 : 0 }} title={`${key}: ${count}`} />
             ) : null;
@@ -954,7 +599,7 @@ function RagControlsView({
             <div key={key} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
               <div style={{ width: 10, height: 10, borderRadius: 2, background: color }} />
               <span style={{ fontSize: 11, color: '#9ca3af' }}>{key}:</span>
-              <span style={{ fontSize: 12, fontWeight: 700, color: '#e5e7eb' }}>{ragComparison.rag_only_by_severity?.[key] || 0}</span>
+              <span style={{ fontSize: 12, fontWeight: 700, color: '#e5e7eb' }}>{ragComparison.gaps_by_severity?.[key] || 0}</span>
             </div>
           ))}
         </div>
@@ -968,7 +613,7 @@ function RagControlsView({
         border: '1px solid #10b98125',
       }}>
         <CheckCircle2 size={14} />
-        <span>RAG identifies {ragComparison.rag_only_count} additional regulatory sections beyond the system control library</span>
+        <span>{ragComparison.found_in_code} of {ragComparison.total_sections} FDIC regulatory sections are addressed in your code ({ragComparison.code_coverage_pct}% coverage)</span>
       </div>
 
       {/* Search / Filter bar */}
@@ -992,24 +637,24 @@ function RagControlsView({
         <FilterSelect
           value={filterSeverity}
           onChange={onSeverityChange}
-          options={[{ value: 'all', label: 'All Severities' }, ...ragSeverities.map(s => ({ value: s, label: s }))]}
+          options={[{ value: 'all', label: 'All Severities' }, ...ragSeverities.map((s: string) => ({ value: s, label: s }))]}
         />
         <FilterSelect
           value={filterRegulation}
           onChange={onRegulationChange}
-          options={[{ value: 'all', label: 'All Regulations' }, ...ragRegulations.map(r => ({ value: r, label: r }))]}
+          options={[{ value: 'all', label: 'All Regulations' }, ...ragRegulations.map((r: string) => ({ value: r, label: r }))]}
         />
       </div>
 
       {/* Results count */}
       <div style={{ fontSize: 12, color: '#6b7280' }}>
-        Showing {filtered.length} of {classified.length} RAG controls
+          Showing {filtered.length} of {gapSections.length} gap sections
       </div>
 
       {/* RAG Control List */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
         <AnimatePresence>
-          {filtered.map((item, i) => (
+          {filtered.map((item: RagControl, i: number) => (
             <RagControlRow
               key={item.section}
               control={item}
@@ -1081,13 +726,13 @@ function RagControlRow({ control, index, expanded, onToggle }: {
           </div>
         </div>
 
-        {/* RAG badge */}
+        {/* Gap badge */}
         <div style={{
           padding: '2px 8px', borderRadius: 6,
-          background: 'rgba(139,92,246,0.1)', border: '1px solid rgba(139,92,246,0.25)',
-          fontSize: 9, fontWeight: 700, color: '#8b5cf6', letterSpacing: 0.5,
+          background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.25)',
+          fontSize: 9, fontWeight: 700, color: '#ef4444', letterSpacing: 0.5,
         }}>
-          RAG CONTROL
+          FDIC GAP
         </div>
 
         {/* Severity badge */}
@@ -1139,7 +784,7 @@ function RagControlRow({ control, index, expanded, onToggle }: {
                 </div>
                 <div>
                   <span style={{ color: '#6b7280' }}>Source: </span>
-                  <span style={{ color: '#10b981', fontWeight: 600 }}>RAG Vector Analysis</span>
+                  <span style={{ color: '#10b981', fontWeight: 600 }}>FDIC Document Analysis</span>
                 </div>
               </div>
 

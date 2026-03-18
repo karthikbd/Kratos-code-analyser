@@ -113,21 +113,24 @@ export interface RagControl {
   description?: string;
   severity: string;
   regulation: string;
-  code_references: { file: string; line: number; text: string }[];
+  code_references: { file: string; line: number; text: string; match_type?: string; keywords?: string[] }[];
 }
 
 export interface RagComparisonData {
-  rag_sections_count: number;
-  ctrl_sections_count: number;
-  overlap_count: number;
-  overlap_sections: string[];
-  ctrl_only_count: number;
-  ctrl_only_details: { control_id: string; section: string; title: string; severity: string; regulation: string }[];
-  rag_only_count: number;
-  rag_only_sections: string[];
-  rag_only_classified: RagControl[];
-  rag_only_by_severity: Record<string, number>;
-  semantic_coverage_pct: number;
+  /** Total FDIC sections extracted from regulatory documents */
+  total_sections: number;
+  /** Sections that are addressed / referenced in the source code */
+  found_in_code: number;
+  /** Sections with no meaningful reference in the source code */
+  gaps_count: number;
+  /** found_in_code / total_sections × 100 */
+  code_coverage_pct: number;
+  /** Sections missing from code — the gaps to fix */
+  gap_sections: RagControl[];
+  /** Sections found in code */
+  found_sections: RagControl[];
+  /** gaps_count broken down by severity */
+  gaps_by_severity: Record<string, number>;
   note: string;
 }
 

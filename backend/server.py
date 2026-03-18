@@ -1066,158 +1066,71 @@ async def get_controls_summary(system_id: str = ""):
 @app.post("/api/controls/validate")
 async def validate_controls_against_rag(system_id: str = ""):
     """
-    Validate each applicable control against the RAG knowledge base.
-
-    Performance: all FAISS queries are run concurrently via asyncio.gather,
-    reducing wall-clock time from O(N × query_time) → O(query_time).
+    Trigger FDIC regulatory section vs source-code coverage check.
+    Delegates to rag_comparison and returns the same payload so the
+    frontend can drive both the counter and the section list from one call.
     """
-    from backend.controls import CONTROL_LIBRARY, detect_system_capabilities, get_applicable_control_ids
-    logger.info("[ValidateRAG] Starting parallel validation for system=%r", system_id or "all")
-    t0 = asyncio.get_event_loop().time()
+    logger.info("[Validate] Delegating to rag_comparison for system=%r", system_id or "all")
     try:
-        from backend.rag import get_knowledge_base
-        kb = get_knowledge_base()
-        if not kb.is_ready:
-            logger.info("[ValidateRAG] Building RAG index...")
-            await asyncio.get_event_loop().run_in_executor(None, kb.build_index)
-
-        # Determine which controls apply to the requested system
-        applicable_ids: set[str] | None = None
-        if system_id:
-            systems = discover_operational_systems()
-            matched = [s for s in systems if s["id"] == system_id]
-            if matched:
-                srcs = read_system_source_code(matched[0]["path"])
-                caps = detect_system_capabilities(srcs)
-                applicable_ids = get_applicable_control_ids(caps)
-
-        controls_to_validate = [
-            c for c in CONTROL_LIBRARY
-            if applicable_ids is None or c.control_id in applicable_ids
-        ]
-
-        # Build queries
-        queries = [
-            f"{c.regulation} {c.section}: {c.title} - {c.description}"
-            for c in controls_to_validate
-        ]
-
-        # Run ALL FAISS queries concurrently — ~10-20× faster than sequential
-        loop = asyncio.get_event_loop()
-        all_docs = await asyncio.gather(*[
-            loop.run_in_executor(None, lambda q=q: kb.query(q, k=2))
-            for q in queries
-        ])
-
-        results = []
-        for ctrl, docs in zip(controls_to_validate, all_docs):
-            validated = len(docs) > 0
-            citation = docs[0].page_content[:300].strip() if docs else ""
-            results.append({
-                "control_id": ctrl.control_id,
-                "title": ctrl.title,
-                "regulation": ctrl.regulation,
-                "section": ctrl.section,
-                "rag_validated": validated,
-                "rag_citation": citation,
-                "category": ctrl.category.value,
-                "severity": ctrl.severity,
-                "layer": ctrl.layer,
-            })
-
-        validated_count = sum(1 for r in results if r["rag_validated"])
-        elapsed_ms = int((asyncio.get_event_loop().time() - t0) * 1000)
-        logger.info(
-            "[ValidateRAG] Done in %dms — %d/%d controls validated (%.1f%%)",
-            elapsed_ms, validated_count, len(results),
-            round(validated_count / len(results) * 100, 1) if results else 0,
-        )
-        return {
-            "total": len(results),
-            "validated": validated_count,
-            "coverage_pct": round(validated_count / len(results) * 100, 1) if results else 0,
-            "results": results,
-        }
+        result = await rag_comparison(system_id=system_id)
+        return result
     except Exception as e:
-        logger.error("[ValidateRAG] Failed: %s", e, exc_info=True)
-        return {"error": str(e), "total": 0, "validated": 0, "coverage_pct": 0, "results": []}
+        logger.error("[Validate] Failed: %s", e, exc_info=True)
+        return {
+            "error": str(e),
+            "total_sections": 0, "found_in_code": 0, "gaps_count": 0,
+            "code_coverage_pct": 0.0, "gap_sections": [], "found_sections": [],
+            "gaps_by_severity": {}, "note": "",
+        }
 
 
 @app.get("/api/controls/rag-comparison")
 async def rag_comparison(system_id: str = ""):
-    """Compare RAG document sections with Control Library sections to show coverage overlap."""
+    """
+    Compare ALL sections from FDIC regulatory documents against actual source code.
+    Returns which sections are addressed in the code (found_sections) vs missing (gap_sections).
+    Counter: found_in_code / total_sections — based purely on FDIC docs vs code, not CONTROL_LIBRARY.
+    """
     import re as _re
-    from backend.controls import CONTROL_LIBRARY
+    import os as _os
     from backend.rag import EMBEDDED_REGULATORY_TEXT
 
-    # Extract unique sections AND titles/descriptions from RAG regulatory documents
-    rag_sections: set[str] = set()
-    rag_section_info: dict[str, dict] = {}  # section_id -> {title, description}
+    # ── Step 1: Extract all unique named sections from FDIC documents ──────────────────
+    all_sections: list[dict] = []
+    seen_sections: set[str] = set()
 
-    for doc_id, text in EMBEDDED_REGULATORY_TEXT.items():
-        # Primary: "Section X.Y - Title\n<body text>" — capture ID, title, first ~250 chars of body
+    for _doc_id, text in EMBEDDED_REGULATORY_TEXT.items():
+        # Named sections: "Section X.Y - Title\n<body>"
         for m in _re.finditer(
-            r'Section\s+(\d+\.\d+(?:\.\d+)?(?:\([a-z]\))?)\s*[-\u2013]\s*([^\n]+)\n((?:(?!Section\s+\d|\.\.\.)[^\n]*\n?){0,5})',
+            r'Section\s+(\d+\.\d+(?:\.\d+)?(?:\([a-z]\))?)\s*[-\u2013]\s*([^\n]+)\n'
+            r'((?:(?!Section\s+\d|\.\.\.)[^\n]*\n?){0,5})',
             text,
         ):
             sec = m.group(1)
+            if sec in seen_sections:
+                continue
+            seen_sections.add(sec)
             title = m.group(2).strip()
             body = _re.sub(r'\s+', ' ', m.group(3)).strip()[:260]
-            rag_sections.add(sec)
-            if sec not in rag_section_info:  # first match wins
-                rag_section_info[sec] = {"title": title, "description": body}
+            all_sections.append({"section": sec, "title": title, "description": body})
 
-        # Secondary: bare CFR references that appear in body text (no title available)
-        for m in _re.finditer(r'(\d{3}\.\d+(?:\([a-z]\))?)', text):
-            rag_sections.add(m.group(1))
-
-        # Appendix entries with optional titles
+        # Appendix entries with titles
         for m in _re.finditer(r'Appendix\s+([A-Z](?:\(\d+\))?)\s*[-\u2013]?\s*([^\n]*)', text):
             sec = 'Appendix ' + m.group(1)
-            rag_sections.add(sec)
-            if sec not in rag_section_info and m.group(2).strip():
-                rag_section_info[sec] = {"title": m.group(2).strip(), "description": ""}
+            if sec in seen_sections:
+                continue
+            seen_sections.add(sec)
+            all_sections.append({
+                "section": sec,
+                "title": m.group(2).strip() if m.group(2).strip() else sec,
+                "description": "",
+            })
 
-    # Scope control sections to applicable controls for this system (if available)
-    if system_id and system_id in _system_results:
-        applicable_ids = {
-            s["id"] for s in _system_results[system_id].get("per_control_status", [])
-            if s.get("applicable", True)
-        }
-        scoped_controls = [c for c in CONTROL_LIBRARY if c.control_id in applicable_ids]
-    else:
-        scoped_controls = list(CONTROL_LIBRARY)
-
-    # Unique sections from (applicable) controls
-    ctrl_sections = set(c.section for c in scoped_controls)
-
-    # Compute overlap
-    overlap = sorted(ctrl_sections & rag_sections)
-    ctrl_only = sorted(ctrl_sections - rag_sections)
-    rag_only = sorted(rag_sections - ctrl_sections)
-
-    # Map ctrl_only to control details (scoped to applicable controls)
-    ctrl_only_details = []
-    for s in ctrl_only:
-        for c in scoped_controls:
-            if c.section == s:
-                ctrl_only_details.append({
-                    "control_id": c.control_id,
-                    "section": s,
-                    "title": c.title,
-                    "severity": c.severity,
-                    "regulation": c.regulation,
-                })
-
-    # ── Classify extra RAG sections by severity + find code references ──
-    import os as _os
-    rag_only_classified = []
-
-    # Scan only the selected system's source files; fall back to all systems if none selected
+    # ── Step 2: Load source files for the selected system ─────────────────────────────
     _base_ops = _os.path.join(_os.path.dirname(_os.path.dirname(__file__)), "operational_systems")
     source_files: dict[str, str] = {}
+
     if system_id:
-        # Scan only the matching system directory
         _sys_path = _os.path.join(_base_ops, system_id)
         if _os.path.isdir(_sys_path):
             for _root, _dirs, _fnames in _os.walk(_sys_path):
@@ -1230,110 +1143,161 @@ async def rag_comparison(system_id: str = ""):
                     except Exception:
                         pass
     else:
-        # No system selected — walk all operational system directories
-        _sys_dirs = []
         if _os.path.isdir(_base_ops):
             for _d in sorted(_os.listdir(_base_ops)):
                 _dp = _os.path.join(_base_ops, _d)
                 if _os.path.isdir(_dp) and not _d.startswith("_"):
-                    _sys_dirs.append(_dp)
-        for sys_dir in _sys_dirs:
-            for _root, _dirs, _fnames in _os.walk(sys_dir):
-                for fname in _fnames:
-                    fpath = _os.path.join(_root, fname)
-                    rel = _os.path.relpath(fpath, _base_ops)
-                    try:
-                        with open(fpath, encoding="utf-8", errors="ignore") as fh:
-                            source_files[rel] = fh.read()
-                    except Exception:
-                        pass
+                    for _root, _dirs, _fnames in _os.walk(_dp):
+                        for fname in _fnames:
+                            fpath = _os.path.join(_root, fname)
+                            rel = _os.path.relpath(fpath, _base_ops)
+                            try:
+                                with open(fpath, encoding="utf-8", errors="ignore") as fh:
+                                    source_files[rel] = fh.read()
+                            except Exception:
+                                pass
 
-    for section in rag_only:
-        # Classify severity by regulation
+    # Pre-join all source content for fast keyword scanning
+    all_source_content = "\n".join(source_files.values()).lower()
+
+    # ── Step 3: For each FDIC section, check if source code meaningfully addresses it ─
+    _sev_order = {"CRITICAL": 0, "HIGH": 1, "MEDIUM": 2, "LOW": 3}
+
+    def _classify_severity(section: str) -> str:
         if section.startswith("370.") or section.startswith("360."):
-            severity = "CRITICAL"
-        elif section.startswith("330."):
-            severity = "HIGH"
-        elif section.startswith("Appendix"):
-            severity = "LOW"
-        else:
-            try:
-                major = int(section.split(".")[0])
-                severity = "MEDIUM" if major <= 8 else "LOW"
-            except ValueError:
-                severity = "LOW"
+            return "CRITICAL"
+        if section.startswith("330."):
+            return "HIGH"
+        if section.startswith("Appendix"):
+            return "LOW"
+        try:
+            major = int(section.split(".")[0])
+            return "MEDIUM" if major <= 8 else "LOW"
+        except ValueError:
+            return "LOW"
 
-        # Determine regulation source
+    def _classify_regulation(section: str) -> str:
         if section.startswith("370"):
-            regulation = "12 CFR Part 370"
-        elif section.startswith("330"):
-            regulation = "12 CFR Part 330"
-        elif section.startswith("360"):
-            regulation = "12 CFR 360.8"
-        else:
-            regulation = "FDIC IT Guide v3.0"
+            return "12 CFR Part 370"
+        if section.startswith("330"):
+            return "12 CFR Part 330"
+        if section.startswith("360"):
+            return "12 CFR 360.8"
+        return "FDIC IT Guide v3.0"
 
-        # Search code for references to this section
-        code_refs = []
+    def _section_addressed_in_code(section: str, title: str, description: str) -> list[dict]:
+        """
+        Returns a list of code references if the FDIC section appears meaningful in the source.
+        'Meaningful' means either:
+          - The exact section number (e.g. "370.2") appears in source, OR
+          - 2+ significant keywords from the section title/description appear in source.
+        """
+        code_refs: list[dict] = []
         sec_escaped = section.replace("(", r"\(").replace(")", r"\)")
-        sec_digits = section.split(".")[0]  # e.g. "370" from "370.2"
-        for fname, content in source_files.items():
-            lines = content.split("\n")
-            for line_no, line_text in enumerate(lines, start=1):
-                if _re.search(sec_escaped, line_text) or (
-                    sec_digits in line_text
-                    and any(
-                        kw in line_text.lower()
-                        for kw in ["section", "cfr", "part", "regulation", "compliance"]
-                    )
-                ):
-                    code_refs.append({
-                        "file": fname,
-                        "line": line_no,
-                        "text": line_text.strip()[:120],
-                    })
-                    break  # one reference per file is enough
 
-        info = rag_section_info.get(section, {})
-        rag_only_classified.append({
-            "section": section,
-            "title": info.get("title", ""),
-            "description": info.get("description", ""),
+        # Build keyword set from title + description (strip stop words, keep tokens >=4 chars)
+        _stop = {"with", "that", "this", "from", "have", "they", "been", "each",
+                 "which", "will", "shall", "must", "the", "and", "for", "are"}
+        raw_text = f"{title} {description}".lower()
+        keywords = [
+            w for w in _re.findall(r'[a-z]{4,}', raw_text)
+            if w not in _stop
+        ]
+        # Keep the top 8 most distinctive keywords (longer = more specific)
+        keywords = sorted(set(keywords), key=len, reverse=True)[:8]
+
+        for fname, content in source_files.items():
+            content_lower = content.lower()
+            lines = content.split("\n")
+
+            # Check 1: exact section number appears in this file
+            if _re.search(sec_escaped, content):
+                for line_no, line_text in enumerate(lines, start=1):
+                    if _re.search(sec_escaped, line_text):
+                        code_refs.append({
+                            "file": fname, "line": line_no,
+                            "text": line_text.strip()[:120],
+                            "match_type": "section_ref",
+                        })
+                        break
+                continue
+
+            # Check 2: 2+ title/description keywords appear in this file
+            if len(keywords) >= 2:
+                matched_kws = [kw for kw in keywords if kw in content_lower]
+                if len(matched_kws) >= 2:
+                    # Find first line that contains any keyword
+                    for line_no, line_text in enumerate(lines, start=1):
+                        line_lower = line_text.lower()
+                        if any(kw in line_lower for kw in matched_kws):
+                            code_refs.append({
+                                "file": fname, "line": line_no,
+                                "text": line_text.strip()[:120],
+                                "match_type": "keyword_match",
+                                "keywords": matched_kws[:3],
+                            })
+                            break
+
+        return code_refs
+
+    found_sections: list[dict] = []
+    gap_sections: list[dict] = []
+
+    for sec_info in all_sections:
+        sec = sec_info["section"]
+        title = sec_info["title"]
+        description = sec_info["description"]
+        severity = _classify_severity(sec)
+        regulation = _classify_regulation(sec)
+
+        code_refs = _section_addressed_in_code(sec, title, description)
+
+        entry = {
+            "section": sec,
+            "title": title,
+            "description": description,
             "severity": severity,
             "regulation": regulation,
             "code_references": code_refs,
-        })
+        }
 
-    # Sort by severity then section ID so CRITICAL items appear first
-    _sev_order = {"CRITICAL": 0, "HIGH": 1, "MEDIUM": 2, "LOW": 3}
-    rag_only_classified.sort(key=lambda x: (_sev_order.get(x["severity"], 9), x["section"]))
+        if code_refs:
+            found_sections.append(entry)
+        else:
+            gap_sections.append(entry)
 
-    # Real overlap ratio: sections that appear in BOTH the regulatory docs and the control library
-    real_coverage_pct = round(len(overlap) / max(len(rag_sections), 1) * 100, 1)
+    # Sort both lists: CRITICAL first, then by section
+    found_sections.sort(key=lambda x: (_sev_order.get(x["severity"], 9), x["section"]))
+    gap_sections.sort(key=lambda x: (_sev_order.get(x["severity"], 9), x["section"]))
+
+    total = len(all_sections)
+    found_count = len(found_sections)
+    gaps_count = len(gap_sections)
+    code_coverage_pct = round(found_count / max(total, 1) * 100, 1)
+
+    logger.info(
+        "[RagComparison] system=%r total_sections=%d found_in_code=%d gaps=%d (%.1f%%)",
+        system_id, total, found_count, gaps_count, code_coverage_pct,
+    )
 
     return {
-        "rag_sections_count": len(rag_sections),
-        "ctrl_sections_count": len(ctrl_sections),
-        "overlap_count": len(overlap),
-        "overlap_sections": overlap,
-        "ctrl_only_count": len(ctrl_only),
-        "ctrl_only_details": ctrl_only_details,
-        "rag_only_count": len(rag_only),
-        "rag_only_sections": rag_only,
-        "rag_only_classified": rag_only_classified,
-        "rag_only_by_severity": {
-            "CRITICAL": sum(1 for r in rag_only_classified if r["severity"] == "CRITICAL"),
-            "HIGH": sum(1 for r in rag_only_classified if r["severity"] == "HIGH"),
-            "MEDIUM": sum(1 for r in rag_only_classified if r["severity"] == "MEDIUM"),
-            "LOW": sum(1 for r in rag_only_classified if r["severity"] == "LOW"),
+        "total_sections": total,
+        "found_in_code": found_count,
+        "gaps_count": gaps_count,
+        "code_coverage_pct": code_coverage_pct,
+        "gap_sections": gap_sections,
+        "found_sections": found_sections,
+        "gaps_by_severity": {
+            "CRITICAL": sum(1 for r in gap_sections if r["severity"] == "CRITICAL"),
+            "HIGH":     sum(1 for r in gap_sections if r["severity"] == "HIGH"),
+            "MEDIUM":   sum(1 for r in gap_sections if r["severity"] == "MEDIUM"),
+            "LOW":      sum(1 for r in gap_sections if r["severity"] == "LOW"),
         },
-        "semantic_coverage_pct": real_coverage_pct,
         "note": (
-            f"{len(overlap)} of {len(rag_sections)} regulatory sections found in the control library "
-            f"({real_coverage_pct}% section-level coverage). Controls use fine-grained sub-sections "
-            "(e.g. 370.3(b)) while the RAG text also contains parent section IDs (e.g. 370.3), "
-            "so actual compliance scope is broader than the numeric overlap suggests. "
-            "The 'Extra in RAG' sections are regulatory topics not explicitly covered by any control."
+            f"{found_count} of {total} FDIC regulatory sections appear to be addressed "
+            f"in your source code ({code_coverage_pct}% coverage). "
+            f"{gaps_count} sections were not found in the code — "
+            "these are the gaps your team should review."
         ),
     }
 

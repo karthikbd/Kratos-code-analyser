@@ -929,11 +929,12 @@ class Layer0EvidenceExtractor:
                 finding_id=f"L0-{ef.parameter.upper().replace('_', '-')}",
                 title=title,
                 description=description,
-                regulation_reference=ef.regulation,
+                cfr_reference=ef.regulation,
                 severity=Severity[sev_map[ef.severity]],
-                remediation=ef.remediation,
-                affected_files=[ef.code_file] if ef.code_file != "(not found)" else [],
-                affected_fields=[ef.parameter],
+                remediation_recommendation=ef.remediation,
+                source_file=ef.code_file if ef.code_file != "(not found)" else "",
+                line_number=ef.code_line,
+                code_snippet=ef.code_context[:200] if ef.code_context else "",
                 evidence={
                     "parameter": ef.parameter,
                     "code_value": str(ef.code_value),
@@ -966,28 +967,89 @@ class Layer0EvidenceExtractor:
         params_found = len(best_evidence)
 
         return LayerScanResult(
-            layer_name="L0_EVIDENCE_EXTRACTION",
+            layer=AnalyzerLayer.LAYER1_ORC_STATIC,
             findings=findings,
-            summary={
-                "title": "Source Code Evidence Extraction & Regulatory Comparison",
-                "scanned_files": len(source_files),
-                "scanned_file_types": scanned_types,
-                "parameters_checked": total_parameters,
-                "parameters_with_evidence": params_found,
-                "parameters_without_evidence": total_parameters - params_found,
-                "compliant_parameters": compliant_count,
-                "non_compliant_parameters": len(findings),
-                "evidence_items_extracted": len(all_evidence),
-                "approach": (
-                    "Values extracted directly from source code (COBOL/Java/SQL/config/Python), "
-                    "then compared against FDIC regulatory requirements. "
-                    "Each finding includes the exact file, line number, code value found, "
-                    "and the required FDIC value."
-                ),
-            },
+            summary=(
+                f"Scanned {len(source_files)} files ({', '.join(f'{v} .{k}' for k, v in scanned_types.items())}). "
+                f"Checked {total_parameters} FDIC regulatory parameters: "
+                f"{compliant_count} compliant, {len(findings)} with findings. "
+                f"{len(all_evidence)} evidence items extracted from source code."
+            ),
             metrics={
                 "files_scanned": len(source_files),
                 "evidence_items": len(all_evidence),
                 "compliance_rate_pct": round(compliant_count / total_parameters * 100, 1),
             },
         )
+
+
+# ── CLI entry point ────────────────────────────────────────────────────────────
+
+if __name__ == "__main__":
+    import pathlib, json
+
+    repo_root = pathlib.Path(__file__).resolve().parents[2]
+    systems_root = repo_root / "operational_systems"
+
+    # Collect every source file under operational_systems/ as {str_path: content}
+    source_files: dict[str, str] = {}
+    for p in sorted(
+        q for q in systems_root.rglob("*")
+        if q.is_file() and q.suffix in {
+            ".cob", ".cpy", ".java", ".py", ".sql", ".sh", ".jcl",
+            ".properties", ".xml", ".csv",
+        }
+    ):
+        try:
+            source_files[str(p)] = p.read_text(encoding="utf-8", errors="replace")
+        except Exception:
+            pass
+
+    print("=" * 70)
+    print("  Layer 0 — Evidence Extractor")
+    print(f"  Scanning {len(source_files)} files under operational_systems/")
+    print("=" * 70)
+
+    analyzer = Layer0EvidenceExtractor()
+    result = analyzer.scan(source_files=source_files)
+
+    # ── Summary line ──────────────────────────────────────────────────────────
+    status_label = "PASS" if result.passed else "FINDINGS"
+    print(f"\nStatus  : {status_label}")
+    print(f"Files   : {result.metrics.get('files_scanned', 0)}")
+    print(f"Evidence: {result.metrics.get('evidence_items', 0)} parameters extracted")
+    print(f"Coverage: {result.metrics.get('compliance_rate_pct', 0):.1f}% compliant")
+    print(f"Findings: {len(result.findings)}")
+
+    if not result.findings:
+        print("\nNo findings.")
+    else:
+        # ── Per-finding table ─────────────────────────────────────────────────
+        SEV_ORDER = {"CRITICAL": 0, "HIGH": 1, "MEDIUM": 2, "LOW": 3}
+        sorted_findings = sorted(
+            result.findings,
+            key=lambda f: (SEV_ORDER.get(f.severity.value, 9), f.title),
+        )
+
+        print(f"\n{'#':<4} {'SEV':<10} {'TITLE':<42} {'CODE VALUE':<20} {'FILE'}")
+        print("-" * 115)
+        for i, f in enumerate(sorted_findings, 1):
+            ev = f.evidence or {}
+            code_val = str(ev.get("code_value", "—"))[:18]
+            loc = f.source_file or ev.get("code_file") or "—"
+            line = f.line_number or ev.get("code_line")
+            loc = f"{loc}:{line}" if line else loc
+            loc = loc[-40:]  # keep rightmost chars for long paths
+            title = f.title[:40]
+            print(f"{i:<4} {f.severity.value:<10} {title:<42} {code_val:<20} {loc}")
+
+        # ── Gaps only ─────────────────────────────────────────────────────────
+        gaps = [f for f in sorted_findings if (f.evidence or {}).get("gap")]
+        if gaps:
+            print(f"\n── {len(gaps)} Parameters with FDIC gaps ────────────────────────────")
+            for f in gaps:
+                ev = f.evidence or {}
+                print(f"  • {f.title}")
+                print(f"      Found   : {ev.get('code_value', '—')}")
+                print(f"      Required: {ev.get('required_value', '—')}")
+                print(f"      Gap     : {ev.get('gap', '')}")
