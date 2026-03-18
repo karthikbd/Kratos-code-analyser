@@ -28,6 +28,7 @@ when reviewing source code on-site.
 """
 from __future__ import annotations
 
+import os
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -240,10 +241,36 @@ class _FileExtractor:
         self.content = content
         self.lines = content.splitlines()
 
+    def _is_comment_line(self, line: str) -> bool:
+        """Return True if this line is a comment in its source language (should be skipped)."""
+        stripped = line.strip()
+        if not stripped:
+            return False
+        ext = os.path.splitext(self.file_path)[1].lower()
+        if ext in ('.cob', '.cpy'):
+            # Fixed-format COBOL: column 7 (index 6) is '*' => comment
+            # Free-format COBOL / continuation: starts with '*>'
+            return (len(line) > 6 and line[6] == '*') or stripped.startswith('*>')
+        if ext in ('.properties', '.sh', '.py', '.yml', '.yaml'):
+            return stripped.startswith('#')
+        if ext == '.sql':
+            return stripped.startswith('--') or stripped.startswith('/*') or stripped.startswith('*')
+        if ext == '.java':
+            return stripped.startswith('//') or stripped.startswith('/*') or stripped.startswith('*')
+        if ext == '.xml':
+            return stripped.startswith('<!--') or stripped.startswith('-->')
+        if ext == '.jcl':
+            return stripped.startswith('//*')
+        return False
+
     def _find_lines(self, pattern: str, flags: int = re.IGNORECASE) -> list[tuple[int, str]]:
-        """Return (1-based line number, full line) for every line matching pattern."""
+        """Return (1-based line number, full line) for every non-comment line matching pattern."""
         compiled = re.compile(pattern, flags)
-        return [(i + 1, line) for i, line in enumerate(self.lines) if compiled.search(line)]
+        return [
+            (i + 1, line)
+            for i, line in enumerate(self.lines)
+            if not self._is_comment_line(line) and compiled.search(line)
+        ]
 
     def extract(self) -> list[EvidenceItem]:
         raise NotImplementedError

@@ -810,11 +810,31 @@ def _enrich_findings_with_source(
         best_snippet = ""
         best_score = 0
 
+        def _is_comment(_re_mod, raw: str, stripped_lower: str, ext: str) -> bool:
+            """True when the line is a comment and should be excluded from scoring."""
+            if ext in ('.cob', '.cpy'):
+                return (len(raw) > 6 and raw[6] == '*') or stripped_lower.startswith('*>')
+            if ext in ('.properties', '.sh', '.py', '.yml', '.yaml'):
+                return stripped_lower.startswith('#')
+            if ext == '.sql':
+                return stripped_lower.startswith('--') or stripped_lower.startswith('/*') or stripped_lower.startswith('*')
+            if ext == '.java':
+                return stripped_lower.startswith('//') or stripped_lower.startswith('/*') or stripped_lower.startswith('*')
+            if ext == '.xml':
+                return stripped_lower.startswith('<!--') or stripped_lower.startswith('-->')
+            if ext == '.jcl':
+                return stripped_lower.startswith('//*')
+            return False
+
         for fname, content in system_sources.items():
+            import os as _os
+            ext = _os.path.splitext(fname)[1].lower()
             lines = content.split('\n')
             for line_no, line_text in enumerate(lines, start=1):
                 line_lower = line_text.lower().strip()
-                if not line_lower or line_lower.startswith('#') and len(line_lower) < 5:
+                if not line_lower:
+                    continue
+                if _is_comment(_re, line_text, line_lower, ext):
                     continue
                 score = sum(1 for kw in keywords if kw.lower() in line_lower)
                 if score > best_score:
