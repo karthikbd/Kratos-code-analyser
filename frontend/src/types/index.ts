@@ -105,6 +105,23 @@ export interface ControlValidationResponse {
   error?: string;
 }
 
+/* ── RAG Knowledge Base Types ───────────────────────────────────────── */
+
+export interface RagSection {
+  section: string;
+  title: string;
+  description: string;
+  regulation: string;
+  doc_id: string;
+  severity: string;
+}
+
+export interface RagSectionsResponse {
+  total: number;
+  sections: RagSection[];
+  documents: string[];
+}
+
 /* ── Operational System Types ────────────────────────────────────────── */
 
 export interface OperationalSystem {

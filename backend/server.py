@@ -1084,6 +1084,71 @@ async def validate_controls_against_rag(system_id: str = ""):
         }
 
 
+@app.get("/api/controls/rag-sections")
+async def get_rag_sections():
+    """
+    Return every named section extracted from the embedded FDIC regulatory documents.
+    Pure read — no code scanning.  Used to display 'what is in the RAG knowledge base'.
+    Returns: {total, sections: [{section, title, regulation, doc_id}], documents: [...]}
+    """
+    import re as _re
+    from backend.rag import EMBEDDED_REGULATORY_TEXT
+
+    _reg_labels: dict[str, str] = {
+        "12_cfr_370":   "12 CFR Part 370",
+        "12_cfr_330":   "12 CFR Part 330",
+        "12_cfr_360_8": "12 CFR 360.8",
+        "fdic_it_guide": "FDIC IT Guide v3.0",
+    }
+    # Sections in these regulations are always high-stakes
+    _reg_severity: dict[str, str] = {
+        "12 CFR Part 370":    "CRITICAL",
+        "12 CFR 360.8":       "HIGH",
+        "12 CFR Part 330":    "HIGH",
+        "FDIC IT Guide v3.0": "MEDIUM",
+    }
+
+    sections: list[dict] = []
+    seen: set[str] = set()
+
+    for doc_id, text in EMBEDDED_REGULATORY_TEXT.items():
+        regulation = next((v for k, v in _reg_labels.items() if k in doc_id), doc_id)
+        severity    = _reg_severity.get(regulation, "MEDIUM")
+
+        for m in _re.finditer(
+            r'Section\s+(\d+\.\d+(?:\.\d+)?(?:\([a-z]\))?)\s*[-\u2013]\s*([^\n]+)\n?((?:[^\n]{0,200}\n?){0,3})',
+            text,
+        ):
+            sec = m.group(1)
+            if sec in seen:
+                continue
+            seen.add(sec)
+            sections.append({
+                "section":    sec,
+                "title":      m.group(2).strip(),
+                "description": m.group(3).strip()[:280] if m.group(3) else "",
+                "regulation": regulation,
+                "doc_id":     doc_id,
+                "severity":   severity,
+            })
+
+    # Sort by regulation priority then section number
+    _reg_order: dict[str, int] = {
+        "12 CFR Part 370": 0, "12 CFR 360.8": 1,
+        "12 CFR Part 330": 2, "FDIC IT Guide v3.0": 3,
+    }
+    sections.sort(key=lambda x: (_reg_order.get(x["regulation"], 9), x["section"]))
+
+    # Ordered unique document list
+    docs: list[str] = list(dict.fromkeys(s["regulation"] for s in sections))
+
+    return {
+        "total":     len(sections),
+        "sections":  sections,
+        "documents": docs,
+    }
+
+
 @app.get("/api/controls/rag-comparison")
 async def rag_comparison(system_id: str = ""):
     """

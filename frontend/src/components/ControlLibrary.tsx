@@ -1,11 +1,12 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import {
   Shield,
   Loader2, BookOpen,
   FileCode2, Download, GitCompare,
+  ChevronDown, ChevronRight, Radar,
 } from 'lucide-react';
-import type { AgentDef } from '../types';
+import type { AgentDef, RagSection, RagSectionsResponse } from '../types';
 
 const API_BASE = (import.meta.env.VITE_WS_URL || 'ws://localhost:8001/ws')
   .replace('ws://', 'http://').replace('wss://', 'https://').replace('/ws', '');
@@ -26,6 +27,25 @@ interface ControlLibraryProps {
 
 export function ControlLibrary({ pipelineStatus, selectedSystem, agents = [] }: ControlLibraryProps) {
   const [compared, setCompared] = useState(false);
+  const [ragSectionsData, setRagSectionsData] = useState<RagSectionsResponse | null>(null);
+  const [loadingRag, setLoadingRag] = useState(false);
+  const [ragExpanded, setRagExpanded] = useState(true);
+  const [expandedDoc, setExpandedDoc] = useState<string | null>(null);
+
+  // Auto-fetch FDIC sections embedded in the RAG knowledge base
+  useEffect(() => {
+    if (pipelineStatus !== 'completed' || ragSectionsData) return;
+    setLoadingRag(true);
+    fetch(`${API_BASE}/api/controls/rag-sections`)
+      .then(r => r.json())
+      .then((data: RagSectionsResponse) => {
+        setRagSectionsData(data);
+        // Auto-expand the first document
+        if (data.documents.length > 0) setExpandedDoc(data.documents[0]);
+      })
+      .catch(e => console.error('Failed to load RAG sections:', e))
+      .finally(() => setLoadingRag(false));
+  }, [pipelineStatus, ragSectionsData]);
 
   // Download full compliance report as JSON
   const downloadReport = useCallback(() => {
@@ -277,6 +297,139 @@ export function ControlLibrary({ pipelineStatus, selectedSystem, agents = [] }: 
         }}>
           <FileCode2 size={14} color="#6b7280" />
           Code scan completed — no hardcoded FDIC parameter values found in this system.
+        </div>
+      )}
+
+      {/* ═══ RAG KNOWLEDGE BASE — FDIC Sections Embedded ═══ */}
+      {pipelineStatus === 'completed' && (
+        <div style={{
+          background: '#111827', borderRadius: 12,
+          border: '1px solid #2a3350', overflow: 'hidden',
+        }}>
+          {/* Header */}
+          <div style={{
+            padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 12,
+            background: 'linear-gradient(90deg, rgba(139,92,246,0.10), rgba(6,182,212,0.04))',
+            borderBottom: ragExpanded ? '1px solid #2a3350' : 'none',
+          }}>
+            <Radar size={16} color="#8b5cf6" />
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: '#e5e7eb', letterSpacing: 0.4 }}>
+                FDIC Sections in RAG Knowledge Base
+              </div>
+              <div style={{ fontSize: 11, color: '#6b7280', marginTop: 2 }}>
+                {loadingRag
+                  ? 'Loading embedded regulatory sections…'
+                  : ragSectionsData
+                    ? `${ragSectionsData.total} regulatory sections from ${ragSectionsData.documents.length} FDIC documents embedded for AI comparison`
+                    : 'Regulatory sections that the AI uses when comparing against your code'}
+              </div>
+            </div>
+            {ragSectionsData && (
+              <>
+                <span style={{
+                  padding: '2px 10px', borderRadius: 20, fontSize: 11, fontWeight: 700,
+                  background: 'rgba(139,92,246,0.18)', color: '#a78bfa',
+                }}>
+                  {ragSectionsData.total} sections
+                </span>
+                <button
+                  onClick={() => setRagExpanded(e => !e)}
+                  style={{
+                    background: 'transparent', border: 'none', cursor: 'pointer',
+                    color: '#6b7280', padding: '4px', display: 'flex', alignItems: 'center',
+                  }}
+                >
+                  {ragExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                </button>
+              </>
+            )}
+            {loadingRag && <Loader2 size={14} color="#8b5cf6" style={{ animation: 'spin 1s linear infinite' }} />}
+          </div>
+
+          {/* Section list grouped by FDIC document */}
+          {ragExpanded && ragSectionsData && (
+            <div style={{ padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {ragSectionsData.documents.map(doc => {
+                const docSections = ragSectionsData.sections.filter(s => s.regulation === doc);
+                const isOpen = expandedDoc === doc;
+                return (
+                  <div key={doc} style={{
+                    borderRadius: 8, border: '1px solid #2a3350', overflow: 'hidden',
+                  }}>
+                    {/* Document header */}
+                    <div
+                      onClick={() => setExpandedDoc(isOpen ? null : doc)}
+                      style={{
+                        padding: '9px 14px', cursor: 'pointer',
+                        display: 'flex', alignItems: 'center', gap: 10,
+                        background: isOpen ? 'rgba(139,92,246,0.07)' : 'rgba(30,41,59,0.4)',
+                        borderBottom: isOpen ? '1px solid #2a3350' : 'none',
+                      }}
+                    >
+                      {isOpen
+                        ? <ChevronDown size={13} color="#8b5cf6" />
+                        : <ChevronRight size={13} color="#6b7280" />}
+                      <BookOpen size={13} color="#8b5cf6" />
+                      <span style={{ fontSize: 12, fontWeight: 700, color: '#c4b5fd', flex: 1 }}>{doc}</span>
+                      <span style={{
+                        fontSize: 11, color: '#6b7280',
+                        background: 'rgba(55,65,81,0.6)', padding: '1px 8px', borderRadius: 10,
+                      }}>
+                        {docSections.length} sections
+                      </span>
+                    </div>
+
+                    {/* Section rows */}
+                    {isOpen && (
+                      <div style={{ display: 'flex', flexDirection: 'column' }}>
+                        {docSections.map((s: RagSection, idx: number) => (
+                          <div key={s.section} style={{
+                            padding: '7px 14px 7px 36px',
+                            borderBottom: idx < docSections.length - 1 ? '1px solid #1f2937' : 'none',
+                            display: 'flex', alignItems: 'flex-start', gap: 10,
+                            background: idx % 2 === 0 ? 'transparent' : 'rgba(30,41,59,0.25)',
+                          }}>
+                            {/* Section number badge */}
+                            <span style={{
+                              fontSize: 10, fontFamily: 'monospace', fontWeight: 700,
+                              color: '#38bdf8', background: 'rgba(56,189,248,0.10)',
+                              padding: '1px 7px', borderRadius: 4, whiteSpace: 'nowrap', marginTop: 1,
+                              minWidth: 60, textAlign: 'center',
+                            }}>
+                              §{s.section}
+                            </span>
+                            {/* Title + description */}
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ fontSize: 11, fontWeight: 600, color: '#d1d5db' }}>{s.title}</div>
+                              {s.description && (
+                                <div style={{
+                                  fontSize: 10, color: '#6b7280', marginTop: 2,
+                                  overflow: 'hidden', textOverflow: 'ellipsis',
+                                  display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical',
+                                }}>
+                                  {s.description}
+                                </div>
+                              )}
+                            </div>
+                            {/* Severity badge */}
+                            <span style={{
+                              fontSize: 9, fontWeight: 800, letterSpacing: 0.5,
+                              color: SEVERITY_COLORS[s.severity] ?? '#6b7280',
+                              background: `${SEVERITY_COLORS[s.severity] ?? '#6b7280'}18`,
+                              padding: '2px 7px', borderRadius: 4, whiteSpace: 'nowrap', marginTop: 1,
+                            }}>
+                              {s.severity}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       )}
 
