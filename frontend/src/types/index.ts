@@ -105,35 +105,6 @@ export interface ControlValidationResponse {
   error?: string;
 }
 
-/* ── RAG Control Types ───────────────────────────────────────────────── */
-
-export interface RagControl {
-  section: string;
-  title?: string;
-  description?: string;
-  severity: string;
-  regulation: string;
-  code_references: { file: string; line: number; text: string; match_type?: string; keywords?: string[] }[];
-}
-
-export interface RagComparisonData {
-  /** Total FDIC sections extracted from regulatory documents */
-  total_sections: number;
-  /** Sections that are addressed / referenced in the source code */
-  found_in_code: number;
-  /** Sections with no meaningful reference in the source code */
-  gaps_count: number;
-  /** found_in_code / total_sections × 100 */
-  code_coverage_pct: number;
-  /** Sections missing from code — the gaps to fix */
-  gap_sections: RagControl[];
-  /** Sections found in code */
-  found_sections: RagControl[];
-  /** gaps_count broken down by severity */
-  gaps_by_severity: Record<string, number>;
-  note: string;
-}
-
 /* ── Operational System Types ────────────────────────────────────────── */
 
 export interface OperationalSystem {
