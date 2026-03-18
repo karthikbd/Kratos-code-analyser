@@ -193,9 +193,16 @@ function FindingRow({ finding, index, controlSections, systemId }: { finding: Fi
   });
   const hlRef = useRef<HTMLDivElement | null>(null);
 
-  // For Layer 0 findings the exact issue context is already carried in evidence.code_context
+  // For Layer 0 findings the exact issue context is already carried in evidence.code_context.
+  // Distinguish between REAL code (actual source lines) and backend absence messages like
+  // "(no aggregation-by-depositor pattern found in file)" which start with '(' or 'No '.
   const inlineCtx = (finding.evidence?.code_context ?? '').trim();
-  const hasInlineCtx = inlineCtx.length > 0 && inlineCtx !== 'No code evidence found for this parameter in any scanned file.';
+  const isAbsenceMsg = (s: string) => {
+    const lo = s.toLowerCase();
+    return s.startsWith('(') || lo.startsWith('no code') || lo.startsWith('no implementation') || lo.startsWith('no evidence');
+  };
+  const isActualCode = inlineCtx.length > 0 && !isAbsenceMsg(inlineCtx);
+  const isAbsent     = inlineCtx.length > 0 && isAbsenceMsg(inlineCtx);
   // Only enable the fetch button when we have a real file + line number
   const canFetch = !!finding.source_file && !!systemId && (finding.line_number ?? 0) > 0;
 
@@ -322,21 +329,21 @@ function FindingRow({ finding, index, controlSections, systemId }: { finding: Fi
               )}
             </div>
           )}
-          {/* ── Inline code context (Layer 0 — exact line already in evidence) ── */}
-          {hasInlineCtx && (
+          {/* ── Actual code from evidence ── */}
+          {isActualCode && (
             <div style={{ marginTop: 6, borderRadius: 6, overflow: 'hidden', border: '1px solid #1e2538' }}>
               <div style={{
                 padding: '3px 10px', background: '#161b22', fontSize: 9, fontWeight: 700,
                 color: '#6b7280', letterSpacing: 0.5, display: 'flex', justifyContent: 'space-between',
               }}>
-                <span style={{ color: '#818cf8' }}>ISSUE CODE</span>
+                <span style={{ color: '#f59e0b' }}>ISSUE CODE</span>
                 {finding.evidence?.code_file && finding.evidence.code_file !== '(not found)' && (
                   <span>{finding.evidence.code_file}{finding.evidence.code_line && finding.evidence.code_line !== '0' ? ` :${finding.evidence.code_line}` : ''}</span>
                 )}
               </div>
               <pre style={{
                 margin: 0, padding: '8px 10px', fontSize: 10, lineHeight: '18px',
-                color: '#fde68a',                     /* amber — makes the issue stand out */
+                color: '#fde68a',
                 background: 'rgba(245,158,11,0.06)',
                 fontFamily: "'JetBrains Mono', 'Fira Code', monospace",
                 whiteSpace: 'pre-wrap', wordBreak: 'break-all',
@@ -344,6 +351,24 @@ function FindingRow({ finding, index, controlSections, systemId }: { finding: Fi
               }}>
                 {inlineCtx}
               </pre>
+            </div>
+          )}
+
+          {/* ── Implementation absent in codebase ── */}
+          {isAbsent && (
+            <div style={{
+              marginTop: 6, padding: '6px 10px', borderRadius: 6,
+              background: 'rgba(239,68,68,0.07)', border: '1px solid rgba(239,68,68,0.25)',
+              display: 'flex', alignItems: 'center', gap: 8,
+            }}>
+              <div style={{
+                fontSize: 9, fontWeight: 800, letterSpacing: 0.6,
+                color: '#ef4444', background: 'rgba(239,68,68,0.15)',
+                padding: '2px 7px', borderRadius: 4, whiteSpace: 'nowrap',
+              }}>NOT IN CODE</div>
+              <span style={{ fontSize: 10, color: '#fca5a5', lineHeight: 1.4 }}>
+                This required implementation was not found in any scanned source file.
+              </span>
             </div>
           )}
 
