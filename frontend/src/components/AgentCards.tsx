@@ -1,10 +1,13 @@
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Shield, CheckCircle, XCircle, Loader2,
-  Clock, FileWarning, ChevronDown, ChevronUp,
+  Clock, FileWarning, ChevronDown, ChevronUp, Code2, RefreshCw,
 } from 'lucide-react';
 import { useState } from 'react';
 import type { AgentDef, Finding } from '../types';
+
+const API_BASE = (import.meta.env.VITE_WS_URL || 'ws://localhost:8001/ws')
+  .replace('ws://', 'http://').replace('wss://', 'https://').replace('/ws', '');
 
 const SEVERITY_COLORS: Record<string, string> = {
   CRITICAL: '#ef4444',
@@ -25,21 +28,22 @@ const STATUS_CONFIG: Record<string, { color: string; icon: typeof Shield; label:
 interface Props {
   agents: AgentDef[];
   controlSections?: Set<string>;
+  systemId?: string;
 }
 
-export function AgentCards({ agents, controlSections }: Props) {
+export function AgentCards({ agents, controlSections, systemId }: Props) {
   return (
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(380px, 1fr))', gap: 16 }}>
       <AnimatePresence>
         {agents.map((agent, i) => (
-          <AgentCard key={agent.id} agent={agent} index={i} controlSections={controlSections} />
+          <AgentCard key={agent.id} agent={agent} index={i} controlSections={controlSections} systemId={systemId} />
         ))}
       </AnimatePresence>
     </div>
   );
 }
 
-function AgentCard({ agent, index, controlSections }: { agent: AgentDef; index: number; controlSections?: Set<string> }) {
+function AgentCard({ agent, index, controlSections, systemId }: { agent: AgentDef; index: number; controlSections?: Set<string>; systemId?: string }) {
   const [expanded, setExpanded] = useState(false);
   const config = STATUS_CONFIG[agent.status] || STATUS_CONFIG.idle;
   const StatusIcon = config.icon;
@@ -162,7 +166,7 @@ function AgentCard({ agent, index, controlSections }: { agent: AgentDef; index: 
           >
             <div style={{ borderTop: '1px solid #2a3350', padding: '12px 20px', maxHeight: 300, overflowY: 'auto' }}>
               {(agent.findings || []).map((f, i) => (
-                <FindingRow key={i} finding={f} index={i} controlSections={controlSections} />
+                <FindingRow key={i} finding={f} index={i} controlSections={controlSections} systemId={systemId} />
               ))}
             </div>
           </motion.div>
@@ -172,8 +176,47 @@ function AgentCard({ agent, index, controlSections }: { agent: AgentDef; index: 
   );
 }
 
-function FindingRow({ finding, index, controlSections }: { finding: Finding; index: number; controlSections?: Set<string> }) {
+interface SnippetState {
+  shown: boolean;
+  loading: boolean;
+  content: string | null;
+  startLine: number;
+  highlightLine: number;
+  error: string | null;
+}
+
+function FindingRow({ finding, index, controlSections, systemId }: { finding: Finding; index: number; controlSections?: Set<string>; systemId?: string }) {
   const sevColor = SEVERITY_COLORS[finding.severity] || '#6b7280';
+  const [snippet, setSnippet] = useState<SnippetState>({
+    shown: false, loading: false, content: null,
+    startLine: 1, highlightLine: 0, error: null,
+  });
+
+  const fetchCode = async () => {
+    if (!finding.source_file || !systemId) return;
+    if (snippet.content) {
+      // toggle visibility
+      setSnippet(s => ({ ...s, shown: !s.shown }));
+      return;
+    }
+    setSnippet(s => ({ ...s, shown: true, loading: true, error: null }));
+    try {
+      const params = new URLSearchParams({
+        system_id: systemId,
+        file_path: finding.source_file,
+        line_number: String(finding.line_number || 0),
+        context_lines: '6',
+      });
+      const res = await fetch(`${API_BASE}/api/source-snippet?${params}`);
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+      setSnippet({ shown: true, loading: false, content: data.content,
+        startLine: data.start_line, highlightLine: data.highlight_line, error: null });
+    } catch (e: unknown) {
+      setSnippet(s => ({ ...s, loading: false,
+        error: e instanceof Error ? e.message : String(e) }));
+    }
+  };
 
   // Determine if this finding maps to a System Control or RAG Control
   const findingRef = finding.cfr_reference || finding.it_guide_reference || '';
@@ -271,17 +314,67 @@ function FindingRow({ finding, index, controlSections }: { finding: Finding; ind
               )}
             </div>
           )}
-          {/* Code Snippet */}
-          {finding.code_snippet && (
-            <pre style={{
-              fontSize: 10, lineHeight: 1.5, color: '#a5b4fc',
-              background: '#0d1117', border: '1px solid #1e2538',
-              borderRadius: 6, padding: '6px 10px', marginTop: 4,
-              overflow: 'auto', maxHeight: 80, whiteSpace: 'pre-wrap',
-              fontFamily: "'JetBrains Mono', 'Fira Code', monospace",
-            }}>
-              {finding.code_snippet}
-            </pre>
+          {/* Code Snippet — fetched on demand from the actual source file */}
+          {finding.source_file && systemId && (
+            <div style={{ marginTop: 4 }}>
+              <button
+                onClick={fetchCode}
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 5,
+                  padding: '3px 10px', borderRadius: 5, fontSize: 10, fontWeight: 600,
+                  background: 'rgba(99,102,241,0.10)', border: '1px solid rgba(99,102,241,0.25)',
+                  color: '#818cf8', cursor: 'pointer',
+                }}
+              >
+                {snippet.loading
+                  ? <><RefreshCw size={11} style={{ animation: 'spin 1s linear infinite' }} /> Loading…</>
+                  : snippet.shown
+                    ? <><ChevronUp size={11} /> Hide Code</>
+                    : <><Code2 size={11} /> View Code in {finding.source_file.split('/').pop()}{(finding.line_number ?? 0) > 0 ? ` :${finding.line_number}` : ''}</>}
+              </button>
+              {snippet.shown && !snippet.loading && (
+                snippet.error
+                  ? <div style={{ fontSize: 10, color: '#f87171', marginTop: 4 }}>{snippet.error}</div>
+                  : (
+                    <div style={{ marginTop: 4, borderRadius: 6, overflow: 'hidden', border: '1px solid #1e2538' }}>
+                      {/* file header */}
+                      <div style={{
+                        padding: '3px 10px', background: '#161b22', fontSize: 9, fontWeight: 700,
+                        color: '#6b7280', letterSpacing: 0.5, display: 'flex', justifyContent: 'space-between',
+                      }}>
+                        <span>{finding.source_file}</span>
+                        {snippet.highlightLine > 0 && <span>Line {snippet.highlightLine}</span>}
+                      </div>
+                      <div style={{ background: '#0d1117', overflow: 'auto', maxHeight: 200 }}>
+                        {(snippet.content ?? '').split('\n').map((line, li) => {
+                          const lineNo = snippet.startLine + li;
+                          const isHl = lineNo === snippet.highlightLine;
+                          return (
+                            <div key={li} style={{
+                              display: 'flex', alignItems: 'flex-start',
+                              background: isHl ? 'rgba(59,130,246,0.12)' : 'transparent',
+                              borderLeft: isHl ? '2px solid #3b82f6' : '2px solid transparent',
+                            }}>
+                              <span style={{
+                                minWidth: 36, padding: '0 6px', fontSize: 9,
+                                color: isHl ? '#3b82f6' : '#374151',
+                                fontFamily: "'JetBrains Mono', monospace",
+                                userSelect: 'none', textAlign: 'right', lineHeight: '18px',
+                              }}>{lineNo}</span>
+                              <pre style={{
+                                margin: 0, padding: '0 8px', fontSize: 10, lineHeight: '18px',
+                                color: isHl ? '#e5e7eb' : '#a5b4fc',
+                                fontFamily: "'JetBrains Mono', 'Fira Code', monospace",
+                                whiteSpace: 'pre', flex: 1, minWidth: 0,
+                              }}>{line}</pre>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )
+              )}
+            </div>
           )}
           <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginTop: 4 }}>
             {finding.cfr_reference && (

@@ -829,7 +829,11 @@ def _enrich_findings_with_source(
         if best_file and best_score > 0:
             f.source_file = best_file
             f.line_number = best_line
-            f.code_snippet = best_snippet[:300]  # cap length
+            # NOTE: We intentionally do NOT set f.code_snippet here.
+            # The keyword matcher picks the highest-scoring line using generic terms
+            # (insurance, account, batch…) which is NOT reliably the line that caused
+            # the finding.  The frontend fetches the real code context on demand via
+            # GET /api/source-snippet?system_id=X&file_path=Y&line_number=N
 
 def _execute_layer1(orc_code: str, pending_code: str):
     from backend.layers.layer1_orc_static import Layer1ORCStaticAnalyzer
@@ -940,6 +944,81 @@ async def list_operational_systems():
     """List available operational systems that can be scanned."""
     systems = discover_operational_systems()
     return {"systems": systems, "count": len(systems)}
+
+
+@app.get("/api/systems")
+async def list_operational_systems():
+    """List available operational systems that can be scanned."""
+    systems = discover_operational_systems()
+    return {"systems": systems, "count": len(systems)}
+
+
+@app.get("/api/source-snippet")
+async def get_source_snippet(
+    system_id: str,
+    file_path: str,
+    line_number: int = 0,
+    context_lines: int = 6,
+):
+    """
+    Return the actual source-file content around a specific line number.
+    Used by the frontend to display the real code context for a finding
+    instead of an unreliable keyword-matched snippet.
+    """
+    systems = discover_operational_systems()
+    system = next((s for s in systems if s["id"] == system_id), None)
+    if not system:
+        return {"error": f"System '{system_id}' not found"}
+
+    system_root = Path(system["path"])
+
+    # file_path may be absolute, relative to system root, or just a filename stem
+    candidate_paths = [
+        Path(file_path),
+        system_root / file_path,
+        system_root / Path(file_path).name,
+    ]
+    # Also search recursively if not found directly
+    target: Path | None = None
+    for cp in candidate_paths:
+        if cp.exists():
+            target = cp
+            break
+    if target is None:
+        # Last resort: recursive search
+        for p in system_root.rglob(Path(file_path).name):
+            target = p
+            break
+
+    if target is None:
+        return {"error": f"File '{file_path}' not found under system '{system_id}'"}
+
+    try:
+        text = target.read_text(encoding="utf-8", errors="replace")
+    except Exception as exc:
+        return {"error": f"Could not read file: {exc}"}
+
+    lines = text.splitlines()
+    total_lines = len(lines)
+
+    if line_number <= 0:
+        # No specific line — return first 30 lines as overview
+        snippet_lines = lines[:30]
+        start_line = 1
+        highlight_line = 0
+    else:
+        start_line = max(1, line_number - context_lines)
+        end_line   = min(total_lines, line_number + context_lines)
+        snippet_lines = lines[start_line - 1 : end_line]
+        highlight_line = line_number
+
+    return {
+        "file": str(target.relative_to(system_root)) if system_root in target.parents else target.name,
+        "start_line": start_line,
+        "highlight_line": highlight_line,
+        "total_lines": total_lines,
+        "content": "\n".join(snippet_lines),
+    }
 
 
 @app.get("/api/runs")

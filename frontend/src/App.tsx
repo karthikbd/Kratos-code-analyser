@@ -299,7 +299,7 @@ export default function App() {
         )}
 
         {activeTab === 'details' && (
-          <AgentCards agents={state.agents.length > 0 ? state.agents : DEFAULT_AGENTS} controlSections={controlSections} />
+          <AgentCards agents={state.agents.length > 0 ? state.agents : DEFAULT_AGENTS} controlSections={controlSections} systemId={selectedSystem} />
         )}
 
         {activeTab === 'events' && (
