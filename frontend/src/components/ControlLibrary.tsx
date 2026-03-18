@@ -1,9 +1,9 @@
-import { useCallback } from 'react';
+import { useCallback, useState } from 'react';
 import { motion } from 'framer-motion';
 import {
   Shield,
   Loader2, BookOpen,
-  FileCode2, Download,
+  FileCode2, Download, GitCompare,
 } from 'lucide-react';
 import type { AgentDef } from '../types';
 
@@ -25,6 +25,8 @@ interface ControlLibraryProps {
 }
 
 export function ControlLibrary({ pipelineStatus, selectedSystem, agents = [] }: ControlLibraryProps) {
+  const [compared, setCompared] = useState(false);
+
   // Download full compliance report as JSON
   const downloadReport = useCallback(() => {
     if (!selectedSystem) return;
@@ -128,24 +130,44 @@ export function ControlLibrary({ pipelineStatus, selectedSystem, agents = [] }: 
                 Here is how they compare to FDIC requirements from the regulatory documents.
               </div>
             </div>
-            <span style={{
-              padding: '3px 10px', borderRadius: 8, fontSize: 11, fontWeight: 700,
-              background: 'rgba(59,130,246,0.12)', border: '1px solid rgba(59,130,246,0.25)',
-              color: '#3b82f6',
-            }}>
-              {layer0Findings.filter(f => f.evidence?.gap).length} gaps found
-            </span>
+            {compared ? (
+              <span style={{
+                padding: '3px 10px', borderRadius: 8, fontSize: 11, fontWeight: 700,
+                background: 'rgba(59,130,246,0.12)', border: '1px solid rgba(59,130,246,0.25)',
+                color: '#3b82f6',
+              }}>
+                {layer0Findings.filter(f => f.evidence?.gap).length} gaps found
+              </span>
+            ) : (
+              <motion.button
+                whileHover={{ scale: 1.03 }}
+                whileTap={{ scale: 0.97 }}
+                onClick={() => setCompared(true)}
+                style={{
+                  padding: '6px 14px', borderRadius: 8,
+                  background: 'linear-gradient(135deg, #8b5cf6, #6366f1)',
+                  border: 'none', color: 'white', fontSize: 12, fontWeight: 700,
+                  cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6,
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                <GitCompare size={13} /> Compare Against FDIC
+              </motion.button>
+            )}
           </div>
 
           {/* Table header */}
           <div style={{
             display: 'grid',
-            gridTemplateColumns: '200px 1fr 1fr 110px',
+            gridTemplateColumns: compared ? '200px 1fr 1fr 110px' : '200px 1fr',
             gap: 0, padding: '8px 20px',
             background: '#0d1117',
             borderBottom: '1px solid #1a2030',
           }}>
-            {["WHAT WE'RE CHECKING", 'FOUND IN YOUR CODE', 'FDIC REQUIRES', 'STATUS'].map(h => (
+            {(compared
+              ? ["WHAT WE'RE CHECKING", 'FOUND IN YOUR CODE', 'FDIC REQUIRES', 'STATUS']
+              : ["WHAT WE'RE CHECKING", 'FOUND IN YOUR CODE']
+            ).map(h => (
               <span key={h} style={{ fontSize: 10, fontWeight: 700, color: '#4b5563', letterSpacing: 1 }}>{h}</span>
             ))}
           </div>
@@ -165,7 +187,7 @@ export function ControlLibrary({ pipelineStatus, selectedSystem, agents = [] }: 
                   key={idx}
                   style={{
                     display: 'grid',
-                    gridTemplateColumns: '200px 1fr 1fr 110px',
+                    gridTemplateColumns: compared ? '200px 1fr 1fr 110px' : '200px 1fr',
                     gap: 0, padding: '10px 20px',
                     borderBottom: '1px solid #1a2030',
                     background: idx % 2 === 0 ? 'transparent' : '#0d111a',
@@ -207,8 +229,8 @@ export function ControlLibrary({ pipelineStatus, selectedSystem, agents = [] }: 
                     )}
                   </div>
 
-                  {/* FDIC requires */}
-                  <div style={{ paddingRight: 8 }}>
+                  {/* FDIC requires — only after compare */}
+                  {compared && <div style={{ paddingRight: 8 }}>
                     <span style={{
                       display: 'inline-block',
                       padding: '3px 10px', borderRadius: 6, fontSize: 12, fontWeight: 700,
@@ -222,10 +244,10 @@ export function ControlLibrary({ pipelineStatus, selectedSystem, agents = [] }: 
                         {ev.gap}
                       </div>
                     )}
-                  </div>
+                  </div>}
 
-                  {/* Status pill */}
-                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 4 }}>
+                  {/* Status pill — only after compare */}
+                  {compared && <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 4 }}>
                     <span style={{
                       padding: '3px 10px', borderRadius: 20, fontSize: 11, fontWeight: 800,
                       background: `${sevColor}18`, border: `1px solid ${sevColor}40`,
@@ -238,7 +260,7 @@ export function ControlLibrary({ pipelineStatus, selectedSystem, agents = [] }: 
                         {f.remediation_recommendation.slice(0, 80)}{f.remediation_recommendation.length > 80 ? '…' : ''}
                       </div>
                     )}
-                  </div>
+                  </div>}
                 </div>
               );
             })}
